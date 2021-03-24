@@ -1,3 +1,4 @@
+#pragma once
 
 namespace polyndrom {
 template <class Key, class T, class Compare = std::less<Key>,
@@ -66,6 +67,10 @@ private:
 	template <class K1, class K2>
 	static inline bool is_equal(const K1& lhs, const K2& rhs);
 	/*
+	 * returns key stored in node
+	 */
+	static inline const key_type& get_key(node_ptr node);
+	/*
 	 * returns node_side::LEFT if 'key' is (or should be) in the left subtree of the 'root'
 	 * returns node_side::RIGHT if 'key' is (or should be) in the right subtree of the 'root'
 	 * returns node_side::UNKNOWN otherwise
@@ -101,3 +106,5 @@ private:
 	size_type current_size;
 };
 } // namespace polyndrom
+
+#include <avl_tree_impl.hpp>
