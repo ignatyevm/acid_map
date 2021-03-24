@@ -1,3 +1,5 @@
+
+namespace polyndrom {
 template <class Key, class T, class Compare = std::less<Key>,
 		  class Allocator = std::allocator<std::pair<const Key, T>>>
 class avl_tree {
@@ -47,8 +49,55 @@ private:
 		node_ptr right;
 		value_type value;
 	};
+	/*
+	 * simple enum for denoting the node position relative another node
+	 */
+	enum class node_side {
+		LEFT, RIGHT, UNKNOWN
+	};
+	/*
+	 * compares 2 keys
+	 */
+	template <class K1, class K2>
+	static inline bool is_less(const K1& lhs, const K2& rhs);
+	/*
+	 * checks for equality of 2 keys
+	 */
+	template <class K1, class K2>
+	static inline bool is_equal(const K1& lhs, const K2& rhs);
+	/*
+	 * returns node_side::LEFT if 'key' is (or should be) in the left subtree of the 'root'
+	 * returns node_side::RIGHT if 'key' is (or should be) in the right subtree of the 'root'
+	 * returns node_side::UNKNOWN otherwise
+	 */
+	template <class K>
+	static inline node_side get_side(node_ptr root, const K& key);
+	/*
+	 * just like in get_side(node_ptr, const K&)
+	 */
+	static inline node_side get_side(node_ptr root, node_ptr node);
+	/*
+	 * returns node_side::LEFT if 'node' is (or should be) in the left subtree of the its parent
+	 * returns node_side::RIGHT if 'node' is (or should be) in the right subtree of the its parent
+	 * returns node_side::UNKNOWN otherwise
+	 */
+	static inline node_side get_side(node_ptr node);
+	/*
+	 * returns tuple<arg1, arg2, arg3>
+	 * if the key is already in the tree with the root='root'
+	 *   arg1 - parent of arg2
+	 *   arg2 - node, contains 'key'
+	 *   arg3 - side of arg2 relative to arg1
+	 * else
+	 *   arg1 - node for key insertion
+	 *   arg2 - nullptr
+	 *   arg3 - position for key insertion
+	 */
+	template <class K>
+	static std::tuple<node_ptr, node_ptr, node_side> find_node(node_ptr root, const K& key);
 
 	// private state
 	node_ptr root;
 	size_type current_size;
 };
+} // namespace polyndrom
