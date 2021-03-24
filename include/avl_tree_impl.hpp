@@ -60,11 +60,12 @@ polyndrom::avl_tree<Key, T, Compare, Allocator>::find_node(node_ptr root, const 
 			return std::make_tuple(parent, node, side);
 		}
 		parent = node;
-		side = get_side(node, key);
-		if (side == node_side::LEFT) {
+		if (is_less(key, node)) {
 			node = node->left;
+			side = node_side::LEFT;
 		} else {
 			node = node->right;
+			side = node_side::RIGHT;
 		}
 	}
 	return std::make_tuple(parent, node, side);
