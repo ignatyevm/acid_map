@@ -3,6 +3,40 @@
 #include <tuple>
 
 template <class Key, class T, class Compare, class Allocator>
+template <class K>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_iterator
+polyndrom::avl_tree<Key, T, Compare, Allocator>::find(const K& key) const {
+	auto [parent, node, side] = find_node(key);
+	if (node == nullptr) {
+		return end();
+	}
+	return avl_tree_iterator(node);
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::size_type
+polyndrom::avl_tree<Key, T, Compare, Allocator>::size() const {
+	return current_size;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+bool polyndrom::avl_tree<Key, T, Compare, Allocator>::empty() const {
+	return size() == 0;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_iterator
+polyndrom::avl_tree<Key, T, Compare, Allocator>::begin() const {
+	return avl_tree_iterator(min_node(root));
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_iterator
+polyndrom::avl_tree<Key, T, Compare, Allocator>::end() const {
+	return avl_tree_iterator(nullptr);
+}
+
+template <class Key, class T, class Compare, class Allocator>
 template <class V>
 polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_node::avl_tree_node(V&& value, node_ptr left,
 																			  node_ptr right, node_ptr parent)

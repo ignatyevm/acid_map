@@ -33,9 +33,11 @@ public:
 	iterator erase(iterator pos);
 	size_type erase(const key_type& key);
 	template <typename K>
-	iterator find(const K& key);
+	iterator find(const K& key) const;
 	size_type size() const;
 	bool empty() const;
+	iterator begin() const;
+	iterator end() const;
 	~avl_tree();
 private:
 	// private interface
