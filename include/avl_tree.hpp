@@ -55,6 +55,8 @@ private:
 		value_type value;
 	};
 	class avl_tree_iterator {
+		friend avl_tree;
+		friend avl_tree_node;
 	public:
 		using iterator_category = std::bidirectional_iterator_tag;
 		using value_type = typename avl_tree::value_type;

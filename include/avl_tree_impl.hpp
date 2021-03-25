@@ -34,6 +34,28 @@ polyndrom::avl_tree<Key, T, Compare, Allocator>::~avl_tree() {
 }
 
 template <class Key, class T, class Compare, class Allocator>
+template <class V>
+std::pair<typename polyndrom::avl_tree<Key, T, Compare, Allocator>::iterator, bool>
+polyndrom::avl_tree<Key, T, Compare, Allocator>::insert(V&& value) {
+	if (root == nullptr) {
+		root = new (node_allocator.allocate(1)) avl_tree_node(std::forward<V>(value));
+		return std::make_pair(avl_tree_iterator(root), true);
+	}
+	auto [parent, node, side] = find_node(root, value.first);
+	if (node != nullptr) {
+		return std::make_pair(avl_tree_iterator(node), false);
+	}
+	node = new (node_allocator.allocate(1)) avl_tree_node(std::forward<V>(value));
+	node->parent = parent;
+	if (side == node_side::LEFT) {
+		parent->left = node;
+	} else {
+		parent->right = node;
+	}
+	return std::make_pair(avl_tree_iterator(node), true);
+}
+
+template <class Key, class T, class Compare, class Allocator>
 template <class K>
 typename polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_iterator
 polyndrom::avl_tree<Key, T, Compare, Allocator>::find(const K& key) const {
@@ -178,7 +200,7 @@ polyndrom::avl_tree<Key, T, Compare, Allocator>::find_node(node_ptr root, const 
 			return std::make_tuple(parent, node, side);
 		}
 		parent = node;
-		if (is_less(key, node)) {
+		if (is_less(key, get_key(node))) {
 			node = node->left;
 			side = node_side::LEFT;
 		} else {
