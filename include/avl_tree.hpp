@@ -23,7 +23,7 @@ public:
 	using const_pointer = typename std::allocator_traits<Allocator>::const_pointer;
 	using iterator = avl_tree_iterator;
 	avl_tree();
-	template <typename InputIt>
+	template <class InputIt>
 	avl_tree(InputIt first, InputIt last);
 	avl_tree(const avl_tree& other);
 	avl_tree(avl_tree&& other);
@@ -44,6 +44,8 @@ private:
 	using node_ptr = avl_tree_node*;
 	using node_allocator_type = typename allocator_type::template rebind<avl_tree_node>::other;
 	class avl_tree_node {
+		friend avl_tree;
+		friend avl_tree_iterator;
 		template <class V>
 		explicit avl_tree_node(V&& value, node_ptr left = nullptr, node_ptr right = nullptr, node_ptr parent = nullptr);
 		~avl_tree_node();
@@ -144,10 +146,15 @@ private:
 	 */
 	template <class K>
 	static std::tuple<node_ptr, node_ptr, node_side> find_node(node_ptr root, const K& key);
+	/*
+	 * calls destructor and deallocate memory for root and his childs
+	 */
+	void destroy_subtree(node_ptr root);
 
 	// private state
 	node_ptr root;
 	size_type current_size;
+	node_allocator_type node_allocator;
 };
 } // namespace polyndrom
 
