@@ -82,11 +82,31 @@ private:
 	 */
 	static inline node_side get_side(node_ptr root, node_ptr node);
 	/*
-	 * returns node_side::LEFT if 'node' is (or should be) in the left subtree of the its parent
-	 * returns node_side::RIGHT if 'node' is (or should be) in the right subtree of the its parent
+	 * returns node_side::LEFT if 'node' is in the left subtree of the its parent
+	 * returns node_side::RIGHT if 'node' is in the right subtree of the its parent
 	 * returns node_side::UNKNOWN otherwise
 	 */
 	static inline node_side get_side(node_ptr node);
+	/*
+	 * returns node with min key in root
+	 */
+	static inline node_ptr min_node(node_ptr root);
+	/*
+	 * returns node with max key in root
+	 */
+	static inline node_ptr max_node(node_ptr root);
+	/*
+	 * returns some parent of 'node', that is get_side(some parent, 'node') == 'side'
+	 */
+	static inline node_ptr nearest_parent_of(node_ptr node, node_side side);
+	/*
+	 * returns prev node that get_key(prev node) < get_key('node') and get_key(prev node) is maximal
+	 */
+	static inline node_ptr prev(node_ptr node);
+	/*
+	 * returns next node that is get_key('node') < get_key(next node) and get_key(next node) is minimal
+	 */
+	static inline node_ptr next(node_ptr node);
 	/*
 	 * returns tuple<arg1, arg2, arg3>
 	 * if the key is already in the tree with the root='root'

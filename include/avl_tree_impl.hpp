@@ -42,7 +42,55 @@ polyndrom::avl_tree<Key, T, Compare, Allocator>::get_side(node_ptr root, node_pt
 template <class Key, class T, class Compare, class Allocator>
 typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_side
 polyndrom::avl_tree<Key, T, Compare, Allocator>::get_side(node_ptr node) {
-	return get_side(node->parent, node);
+	return get_side(node->parent, get_key(node));
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
+polyndrom::avl_tree<Key, T, Compare, Allocator>::min_node(node_ptr root) {
+	while (root->left != nullptr) {
+		root = root->left;
+	}
+	return root;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
+polyndrom::avl_tree<Key, T, Compare, Allocator>::max_node(node_ptr root) {
+	while (root->right != nullptr) {
+		root = root->right;
+	}
+	return root;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
+polyndrom::avl_tree<Key, T, Compare, Allocator>::nearest_parent_of(node_ptr node, node_side side) {
+	while (node != nullptr) {
+		if (node->parent != nullptr && get_side(node) == side) {
+			return node->parent;
+		}
+		node = node->parent;
+	}
+	return nullptr;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
+polyndrom::avl_tree<Key, T, Compare, Allocator>::prev(node_ptr node) {
+	if (node->left != nullptr) {
+		return max_node(node);
+	}
+	return nearest_parent_of(node, node_side::RIGHT);
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
+polyndrom::avl_tree<Key, T, Compare, Allocator>::next(node_ptr node) {
+	if (node->right != nullptr) {
+		return min_node(node);
+	}
+	return nearest_parent_of(node, node_side::LEFT);
 }
 
 template <class Key, class T, class Compare, class Allocator>
