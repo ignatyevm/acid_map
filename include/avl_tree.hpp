@@ -152,6 +152,14 @@ private:
 	 * calls destructor and deallocate memory for root and his childs
 	 */
 	void destroy_subtree(node_ptr root);
+	/*
+	 * makes left rotation about 'node', returns new root of subtree with old root = 'node'
+	 */
+	static inline node_ptr rotate_left(node_ptr node);
+	/*
+	 * makes right rotation about 'node', returns new root of subtree with old root = 'node'
+	 */
+	static inline node_ptr rotate_right(node_ptr node);
 
 	// private state
 	node_ptr root;

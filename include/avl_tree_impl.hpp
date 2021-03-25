@@ -223,6 +223,30 @@ void polyndrom::avl_tree<Key, T, Compare, Allocator>::destroy_subtree(node_ptr r
 }
 
 template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
+polyndrom::avl_tree<Key, T, Compare, Allocator>::rotate_left(node_ptr node) {
+	node_ptr right_child = node->right;
+	node->right = right_child->left;
+	right_child->left = node;
+	right_child->left->parent = node;
+	right_child->parent = node->parent;
+	node->parent = right_child;
+	return right_child;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
+polyndrom::avl_tree<Key, T, Compare, Allocator>::rotate_right(node_ptr node) {
+	node_ptr left_child = node->left;
+	node->right = left_child->right;
+	left_child->right = node;
+	left_child->right->parent = node;
+	left_child->parent = node->parent;
+	node->parent = left_child;
+	return left_child;
+}
+
+template <class Key, class T, class Compare, class Allocator>
 polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_iterator::avl_tree_iterator(node_ptr node) : node(node) {}
 
 template <class Key, class T, class Compare, class Allocator>
