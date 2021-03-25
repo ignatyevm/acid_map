@@ -50,6 +50,28 @@ private:
 		node_ptr right;
 		value_type value;
 	};
+	class avl_tree_iterator {
+	public:
+		using iterator_category = std::bidirectional_iterator_tag;
+		using value_type = typename avl_tree::value_type;
+		using pointer = value_type*;
+		using reference = value_type&;
+		using difference_type = std::size_t;
+		avl_tree_iterator(const avl_tree_iterator& other);
+		avl_tree_iterator& operator=(const avl_tree_iterator& other);
+		avl_tree_iterator& operator++();
+		avl_tree_iterator operator++(int);
+		avl_tree_iterator& operator--();
+		avl_tree_iterator operator--(int);
+		value_type& operator*();
+		value_type* operator->();
+		bool operator==(const avl_tree_iterator& other);
+		bool operator!=(const avl_tree_iterator& other);
+		~avl_tree_iterator();
+	private:
+		node_ptr node;
+		explicit avl_tree_iterator(node_ptr node);
+	};
 	/*
 	 * simple enum for denoting the node position relative another node
 	 */
