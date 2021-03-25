@@ -122,13 +122,13 @@ private:
 	 */
 	static inline node_ptr nearest_parent_of(node_ptr node, node_side side);
 	/*
-	 * returns prev node that get_key(prev node) < get_key('node') and get_key(prev node) is maximal
+	 * returns prev node that is get_key(prev node) < get_key('node') and get_key(prev node) is maximal
 	 */
-	static inline node_ptr prev(node_ptr node);
+	static inline node_ptr prev_node(node_ptr node);
 	/*
 	 * returns next node that is get_key('node') < get_key(next node) and get_key(next node) is minimal
 	 */
-	static inline node_ptr next(node_ptr node);
+	static inline node_ptr next_node(node_ptr node);
 	/*
 	 * returns tuple<arg1, arg2, arg3>
 	 * if the key is already in the tree with the root='root'
