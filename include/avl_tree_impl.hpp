@@ -48,10 +48,12 @@ polyndrom::avl_tree<Key, T, Compare, Allocator>::insert(V&& value) {
 	node = new (node_allocator.allocate(1)) avl_tree_node(std::forward<V>(value));
 	node->parent = parent;
 	if (side == node_side::LEFT) {
-		parent->left = node;
+		node->parent->left = node;
 	} else {
-		parent->right = node;
+		node->parent->right = node;
 	}
+	update_height(node->parent);
+	balance_path(node->parent);
 	return std::make_pair(avl_tree_iterator(node), true);
 }
 
@@ -59,7 +61,7 @@ template <class Key, class T, class Compare, class Allocator>
 template <class K>
 typename polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_iterator
 polyndrom::avl_tree<Key, T, Compare, Allocator>::find(const K& key) const {
-	auto [parent, node, side] = find_node(key);
+	auto [parent, node, side] = find_node(root, key);
 	if (node == nullptr) {
 		return end();
 	}
@@ -91,9 +93,9 @@ polyndrom::avl_tree<Key, T, Compare, Allocator>::end() const {
 
 template <class Key, class T, class Compare, class Allocator>
 template <class V>
-polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_node::avl_tree_node(V&& value, node_ptr left,
-																			  node_ptr right, node_ptr parent)
-	: value(std::forward<V>(value)), left(left), right(right), parent(parent) {}
+polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_node::avl_tree_node(V&& value, node_ptr left, node_ptr right,
+																			  node_ptr parent, int8_t height)
+	: value(std::forward<V>(value)), left(left), right(right), parent(parent), height(height) {}
 
 template <class Key, class T, class Compare, class Allocator>
 polyndrom::avl_tree<Key, T, Compare, Allocator>::avl_tree_node::~avl_tree_node() {
@@ -226,11 +228,17 @@ template <class Key, class T, class Compare, class Allocator>
 typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
 polyndrom::avl_tree<Key, T, Compare, Allocator>::rotate_left(node_ptr node) {
 	node_ptr right_child = node->right;
-	node->right = right_child->left;
+	if (node->right != nullptr) {
+		node->right = right_child->left;
+	}
+	if (right_child->left != nullptr) {
+		right_child->left->parent = node;
+	}
 	right_child->left = node;
-	right_child->left->parent = node;
 	right_child->parent = node->parent;
 	node->parent = right_child;
+	update_height(node);
+	update_height(right_child);
 	return right_child;
 }
 
@@ -238,12 +246,77 @@ template <class Key, class T, class Compare, class Allocator>
 typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
 polyndrom::avl_tree<Key, T, Compare, Allocator>::rotate_right(node_ptr node) {
 	node_ptr left_child = node->left;
-	node->right = left_child->right;
+	if (node->left != nullptr) {
+		node->left = left_child->right;
+	}
+	if (left_child->right != nullptr) {
+		left_child->right->parent = node;
+	}
 	left_child->right = node;
-	left_child->right->parent = node;
 	left_child->parent = node->parent;
 	node->parent = left_child;
+	update_height(node);
+	update_height(left_child);
 	return left_child;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+int8_t polyndrom::avl_tree<Key, T, Compare, Allocator>::height(node_ptr node) {
+	if (node == nullptr) return 0;
+	return node->height;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+void polyndrom::avl_tree<Key, T, Compare, Allocator>::update_height(node_ptr node) {
+	if (node == nullptr) return;
+	node->height = std::max(height(node->left), height(node->right)) + 1;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+int polyndrom::avl_tree<Key, T, Compare, Allocator>::balance_factor(node_ptr node) {
+	if (node == nullptr) return 0;
+	return height(node->left) - height(node->right);
+}
+
+template <class Key, class T, class Compare, class Allocator>
+typename polyndrom::avl_tree<Key, T, Compare, Allocator>::node_ptr
+polyndrom::avl_tree<Key, T, Compare, Allocator>::balance(node_ptr node) {
+	int bf = balance_factor(node);
+	if (bf == 2) {
+		if (balance_factor(node->left) == -1) {
+			node->left = rotate_left(node->left);
+		}
+		return rotate_right(node);
+	} else if (bf == -2) {
+		if (balance_factor(node->right) == 1) {
+			node->right = rotate_right(node->right);
+		}
+		return rotate_left(node);
+	}
+	update_height(node);
+	return node;
+}
+
+template <class Key, class T, class Compare, class Allocator>
+void polyndrom::avl_tree<Key, T, Compare, Allocator>::balance_path(node_ptr node) {
+	while (true) {
+		if (balance_factor(node) == 0) {
+			break;
+		}
+		node = balance(node);
+		if (node->parent != nullptr) {
+			node_side side = get_side(node);
+			if (side == node_side::LEFT) {
+				node->parent->left = node;
+			} else {
+				node->parent->right = node;
+			}
+		} else {
+			root = node;
+			break;
+		}
+		node = node->parent;
+	}
 }
 
 template <class Key, class T, class Compare, class Allocator>

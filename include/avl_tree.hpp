@@ -6,8 +6,8 @@ template <class Key, class T, class Compare = std::less<Key>,
 class avl_tree {
 private:
 	// forward decl
-	struct avl_tree_node;
-	struct avl_tree_iterator;
+	class avl_tree_node;
+	class avl_tree_iterator;
 public:
 	// public interface
 	using key_type = Key;
@@ -47,12 +47,14 @@ private:
 		friend avl_tree;
 		friend avl_tree_iterator;
 		template <class V>
-		explicit avl_tree_node(V&& value, node_ptr left = nullptr, node_ptr right = nullptr, node_ptr parent = nullptr);
+		explicit avl_tree_node(V&& value, node_ptr left = nullptr, node_ptr right = nullptr, node_ptr parent = nullptr,
+							   int8_t height = 1);
 		~avl_tree_node();
 		node_ptr parent;
 		node_ptr left;
 		node_ptr right;
 		value_type value;
+		int8_t height;
 	};
 	class avl_tree_iterator {
 		friend avl_tree;
@@ -160,6 +162,26 @@ private:
 	 * makes right rotation about 'node', returns new root of subtree with old root = 'node'
 	 */
 	static inline node_ptr rotate_right(node_ptr node);
+	/*
+	 * wrapper about avl_tree_node::height (returns 0 if node is nullptr)
+	 */
+	static inline int8_t height(node_ptr node);
+	/*
+	 * wrapper about avl_tree_node::height (assign new height to node, if node is nullptr don't assign))
+	 */
+	static inline void update_height(node_ptr node);
+	/*
+	 * returns difference between heights of left and right subtrees of node
+	 */
+	static inline int balance_factor(node_ptr node);
+	/*
+	 * makes difference heights of left and right subtrees of node less than 2
+	 */
+	static inline node_ptr balance(node_ptr node);
+	/*
+	 * makes balance path from node to root of tree
+	 */
+	inline void balance_path(node_ptr node);
 
 	// private state
 	node_ptr root;
