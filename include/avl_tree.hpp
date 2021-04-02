@@ -190,4 +190,7 @@ private:
 };
 } // namespace polyndrom
 
-#include <avl_tree_impl.hpp>
+#include <impl/avl_tree_node.hpp>
+#include <impl/avl_tree_private.hpp>
+#include <impl/avl_tree.hpp>
+#include <impl/avl_tree_iterator.hpp>
