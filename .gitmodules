@@ -1,3 +1,4 @@
-[submodule "lib"]
-	path = lib
+[submodule "lib/googletest"]
+	path = lib/googletest
 	url = https://github.com/google/googletest.git
+	branch = v1.10.x
