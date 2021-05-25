@@ -2,6 +2,7 @@
 
 #include <tuple>
 #include <ostream>
+#include <iterator>
 
 namespace polyndrom {
 
@@ -12,7 +13,8 @@ template <class Key, class T, class Compare = std::less<Key>, class Allocator = 
 class acid_map {
 private:
     template <class Tree>
-    friend class tree_verifier;
+    friend
+    class tree_verifier;
     class avl_tree_node;
     class avl_tree_iterator;
     using node_ptr = avl_tree_node*;
@@ -41,21 +43,14 @@ public:
     }
     template <typename K>
     mapped_type& operator[](K&& key) {
-        return try_emplace(key).first->second;
+        return try_emplace(std::forward<K>(key)).first->second;
     }
     mapped_type& at(const key_type& key) {
         auto [parent, node] = find_node(root_, key);
         if (node == nullptr) {
             throw std::out_of_range("Key does not exists");
         }
-        return node->value.second;
-    }
-    const mapped_type& at(const key_type& key) const {
-        auto [parent, node] = find_node(root_, key);
-        if (node == nullptr) {
-            throw std::out_of_range("Key does not exists");
-        }
-        return node->value.second;
+        return node->value_.second;
     }
     template <class K>
     bool contains(const K& key) const {
@@ -106,20 +101,20 @@ public:
             return 0;
         }
         erase_node(node);
-        return 0;
+        return 1;
     }
     size_type erase(iterator pos) {
         node_ptr next = next_node(pos.node_);
         erase_node(pos.node_);
         return next;
     }
-    iterator begin() const {
+    iterator begin() {
         if (root_ == nullptr) {
             return end();
         }
         return avl_tree_iterator(min_node(root_));
     }
-    iterator end() const {
+    iterator end() {
         return avl_tree_iterator();
     }
     size_type size() const {
@@ -140,6 +135,11 @@ private:
     class avl_tree_iterator {
     public:
         friend acid_map;
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type = std::pair<const Key, T>;
+        using difference_type = size_t;
+        using pointer = value_type*;
+        using reference = value_type&;
         avl_tree_iterator() = default;
         avl_tree_iterator(const avl_tree_iterator& other) : node_(other.node_) {}
         avl_tree_iterator& operator=(const avl_tree_iterator& other) {
@@ -170,10 +170,10 @@ private:
         value_type* operator->() {
             return &node_->value_;
         }
-        bool operator==(iterator other) {
+        bool operator==(iterator other) const {
             return node_ == other.node_;
         }
-        bool operator!=(iterator other) {
+        bool operator!=(iterator other) const {
             return node_ != other.node_;
         }
     private:
@@ -183,7 +183,8 @@ private:
     class avl_tree_node {
     public:
         template <class Tree>
-        friend class tree_verifier;
+        friend
+        class tree_verifier;
         friend acid_map;
         template <class... Args>
         avl_tree_node(Args&& ... args) : value_(std::forward<Args>(args)...) {}
@@ -258,11 +259,11 @@ private:
         destroy_node(node);
     }
     template <class K1, class K2>
-    inline bool is_less(K1 lhs, K2 rhs) const {
+    inline bool is_less(const K1& lhs, const K2& rhs) const {
         return comparator_(lhs, rhs);
     }
     template <class K1, class K2>
-    inline bool is_equal(K1 lhs, K2 rhs) const {
+    inline bool is_equal(const K1& lhs, const K2& rhs) const {
         return !is_less(lhs, rhs) && !is_less(rhs, lhs);
     }
     static inline bool is_left_child(node_ptr node) {
