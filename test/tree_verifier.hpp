@@ -2,6 +2,8 @@
 
 #include "acid_map.hpp"
 
+#include <iostream>
+
 namespace polyndrom {
 
 template <class Tree>
@@ -30,15 +32,19 @@ public:
         node_ptr right = node->right_;
         if (parent != nullptr) {
             if (tree_.is_left_child(node) && parent->left_ != node) {
-                fails_ostream_ << "parent left node: " << parent->value_.first << " "
-                               << (parent->left_ == nullptr ? -1 : parent->left_->value_.first) << " "
-                               << node->value_.first << std::endl;
+                fails_ostream_ << "parent left node: " << parent->value_.first << " ";
+                if (parent->left_ == nullptr) {
+                    fails_ostream_ << parent->left_->value_.first << " ";
+                }
+                fails_ostream_ << node->value_.first << std::endl;
                 return false;
             }
             if (tree_.is_right_child(node) && parent->right_ != node) {
-                fails_ostream_ << "parent right node: " << parent->value_.first << " "
-                               << (parent->right_ == nullptr ? -1 : parent->right_->value_.first) << " "
-                               << node->value_.first << std::endl;
+                fails_ostream_ << "parent right node: " << parent->value_.first << " ";
+                if (parent->right_ == nullptr) {
+                    fails_ostream_ << parent->right_->value_.first << " ";
+                }
+                fails_ostream_ << node->value_.first << std::endl;
                 return false;
             }
         }
