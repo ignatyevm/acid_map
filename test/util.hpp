@@ -2,30 +2,28 @@
 #include <string>
 #include <algorithm>
 
-class complex_key {
+class complex_object {
 public:
-    complex_key() = default;
-    complex_key(const complex_key& other) : a_(other.a_), b_(other.b_), c_(other.c_), has_copied_(true) {}
-    complex_key& operator=(const complex_key& other) {
-        a_ = other.a_;
-        b_ = other.b_;
-        c_ = other.c_;
+    complex_object() : num_(0), str_() {}
+    complex_object(const complex_object& other) : num_(other.num_), str_(other.str_), has_copied_(true) {}
+    complex_object& operator=(const complex_object& other) {
+        num_ = other.num_;
+        str_ = other.str_;
         return *this;
     }
-    complex_key(complex_key&& other) noexcept :  a_(other.a_), b_(other.b_), c_(std::move(other.c_)), has_moved_(true) {}
-    complex_key& operator=(complex_key&& other) noexcept {
-        a_ = other.a_;
-        b_ = other.b_;
-        c_ = std::move(other.c_);
-        return *this;
+    complex_object(complex_object&& other) noexcept : num_(other.num_), str_(std::move(other.str_)), has_moved_(true) {}
+    complex_object& operator=(complex_object&& other) noexcept {
+        num_ = other.num_;
+        str_ = std::move(other.str_);
         return *this;
     }
-    complex_key(int a, int b, const std::string& c) : a_(a), b_(b), c_(c), has_emplaced_(true) {}
-    bool operator<(const complex_key& rhs) const {
-        return std::make_tuple(a_, b_, c_) < std::make_tuple(rhs.a_, rhs.b_, rhs.c_);
+    complex_object(int num, std::string&& str) : num_(num), str_(std::move(str)), has_emplaced_(true) {}
+    complex_object(int num, const std::string& str) : num_(num), str_(str), has_emplaced_(true) {}
+    bool operator<(const complex_object& rhs) const {
+        return std::make_tuple(num_, str_) < std::make_tuple(rhs.num_, rhs.str_);
     }
-    bool operator==(const complex_key& rhs) const {
-        return std::make_tuple(a_, b_, c_) == std::make_tuple(rhs.a_, rhs.b_, rhs.c_);
+    bool operator==(const complex_object& rhs) const {
+        return std::make_tuple(num_, str_) == std::make_tuple(rhs.num_, rhs.str_);
     }
     bool has_copied() const {
         return has_copied_ && !has_moved_ && !has_emplaced_;
@@ -44,16 +42,15 @@ public:
         has_moved_ = false;
         has_emplaced_ = false;
     }
-    int a_;
-    int b_;
-    std::string c_;
+    int num_;
+    std::string str_;
     bool has_copied_ = false;
     bool has_moved_ = false;
     bool has_emplaced_ = false;
 };
 
-std::ostream& operator<<(std::ostream& os, const complex_key& key) {
-    os << key.a_ << " " << key.b_ << " " << key.c_;
+std::ostream& operator<<(std::ostream& os, const complex_object& key) {
+    os << key.num_ << " " << key.str_;
     return os;
 }
 
@@ -85,14 +82,16 @@ private:
     std::uniform_int_distribution<int> char_distribution_;
 };
 
-class complex_key_generator {
+class complex_object_generator {
 public:
-    complex_key_generator() : int_generator_(0, 1), string_generator_(100, 100) {}
-    complex_key next_value() {
-        int a = int_generator_.next_value();
-        complex_key key(a, a, string_generator_.next_value());
-        key.has_emplaced_ = false;
-        return key;
+    complex_object_generator() : int_generator_(0, 1), string_generator_(100, 100) {}
+    complex_object next_value() {
+        complex_object object(int_generator_.next_value(), string_generator_.next_value());
+        object.clear_flags();
+        return object;
+    }
+    std::string random_string() {
+        return string_generator_.next_value();
     }
 private:
     int_generator int_generator_;
@@ -133,8 +132,14 @@ std::vector<std::string> generate_random_strings(int n, int min_len, int max_len
 
 template <class C>
 typename C::iterator random_element(C& c) {
-    int_generator generator(0, (int) c.size() - 2);
+    int_generator generator(0, (int) c.size() - 3);
     auto it = c.begin();
     std::advance(it, generator.next_value());
     return it;
+}
+
+complex_object make_unique_object(complex_object_generator& objects_generator) {
+    complex_object object = objects_generator.next_value();
+    object.num_ = 2;
+    return object;
 }
