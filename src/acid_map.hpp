@@ -81,7 +81,7 @@ public:
             return std::make_pair(avl_tree_iterator(existing_node), false);
         }
         insert_node(parent, node);
-        return std::make_pair(avl_tree_iterator(existing_node), true);
+        return std::make_pair(avl_tree_iterator(node), true);
     }
     template <class K, class ...Args>
     std::pair<iterator, bool> try_emplace(K&& key, Args&& ...args) {
@@ -103,10 +103,10 @@ public:
         erase_node(node);
         return 1;
     }
-    size_type erase(iterator pos) {
+    iterator erase(iterator pos) {
         node_ptr next = next_node(pos.node_);
         erase_node(pos.node_);
-        return next;
+        return avl_tree_iterator(next);
     }
     iterator begin() {
         if (root_ == nullptr) {
