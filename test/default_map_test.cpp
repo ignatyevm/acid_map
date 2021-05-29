@@ -7,9 +7,30 @@
 using std::cout;
 using std::endl;
 
+const std::map<std::string, int> test_config = {
+    {"InitialSize", 10000},
+    {"InsertExistingLvalue", 1000},
+    {"InsertNotExistingLvalue", 1000},
+    {"InsertExistingRvalue", 1000},
+    {"InsertNotExistingRvalue", 1000},
+    {"EmplaceExistingValue", 1000},
+    {"EmplaceNotExistingValue", 1000},
+    {"TryEmplaceExistingValue", 1000},
+    {"TryEmplaceNotExistingValue", 1000},
+    {"EraseExistingValue", 1000},
+    {"EraseNotExistingValue", 1000},
+    {"EraseByIterator", 1000},
+    {"CheckLookupExistingValue", 1000},
+    {"CheckLookupNotExistingValue", 1000},
+    {"SubscriptOperatorForExistingValue", 1000},
+    {"SubscriptOperatorForNotExistingValue", 1000},
+    {"AtForExistingValue", 1000},
+    {"AtForNotExistingValue", 1000},
+};
+
 class FilledMapTest : public ::testing::Test {
 protected:
-    FilledMapTest() = default;
+    FilledMapTest() : n_(test_config.at("InitialSize")) {}
     void SetUp() {
         for (int i = 0; i < n_; i++) {
             complex_object key = objects_generator_.next_value();
@@ -25,26 +46,26 @@ protected:
         map_.clear();
         inserted_values_.clear();
     }
-    int n_ = 10000;
+    int n_;
     std::vector<std::pair<complex_object, complex_object>> inserted_values_;
     polyndrom::acid_map<complex_object, complex_object> map_;
     complex_object_generator objects_generator_;
 };
 TEST_F(FilledMapTest, InsertExistingLvalue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("InsertExistingLvalue"); i++) {
         auto prev_size = map_.size();
         auto& [key, value] = *random_element(inserted_values_);
         auto p = std::make_pair(key, objects_generator_.next_value());
         auto [it, flag] = map_.insert(p);
         EXPECT_FALSE(flag);
-        EXPECT_EQ(it->first, key);
-        EXPECT_EQ(it->second, value);
+        EXPECT_EQ((*it).first, key);
+        EXPECT_EQ((*it).second, value);
         EXPECT_EQ(prev_size, map_.size());
     }
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, InsertNotExistingLvalue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("InsertNotExistingLvalue"); i++) {
         auto prev_size = map_.size();
         complex_object key = make_unique_object(objects_generator_);
         complex_object value = objects_generator_.next_value();
@@ -53,27 +74,27 @@ TEST_F(FilledMapTest, InsertNotExistingLvalue) {
         EXPECT_TRUE(flag);
         EXPECT_TRUE(it->first.has_copied());
         EXPECT_TRUE(it->second.has_copied());
-        EXPECT_EQ(it->first, key);
-        EXPECT_EQ(it->second, value);
+        EXPECT_EQ((*it).first, key);
+        EXPECT_EQ((*it).second, value);
         EXPECT_EQ(prev_size + 1, map_.size());
     }
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, InsertExistingRvalue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("InsertExistingRvalue"); i++) {
         auto prev_size = map_.size();
         auto& [key, value] = *random_element(inserted_values_);
         auto p = std::make_pair(key, objects_generator_.next_value());
         auto [it, flag] = map_.insert(std::move(p));
         EXPECT_FALSE(flag);
-        EXPECT_EQ(it->first, key);
-        EXPECT_EQ(it->second, value);
+        EXPECT_EQ((*it).first, key);
+        EXPECT_EQ((*it).second, value);
         EXPECT_EQ(prev_size, map_.size());
     }
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, InsertNotExistingRvalue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("InsertNotExistingRvalue"); i++) {
         auto prev_size = map_.size();
         complex_object key = make_unique_object(objects_generator_);
         complex_object value = objects_generator_.next_value();
@@ -82,14 +103,14 @@ TEST_F(FilledMapTest, InsertNotExistingRvalue) {
         EXPECT_TRUE(flag);
         EXPECT_TRUE(it->first.has_moved());
         EXPECT_TRUE(it->second.has_moved());
-        EXPECT_EQ(it->first, key);
-        EXPECT_EQ(it->second, value);
+        EXPECT_EQ((*it).first, key);
+        EXPECT_EQ((*it).second, value);
         EXPECT_EQ(prev_size + 1, map_.size());
     }
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, EmplaceExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("EmplaceExistingValue"); i++) {
         auto prev_size = map_.size();
         auto& [key, value] = *random_element(inserted_values_);
         complex_object new_value = make_unique_object(objects_generator_);
@@ -106,7 +127,7 @@ TEST_F(FilledMapTest, EmplaceExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, EmplaceNotExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("EmplaceNotExistingValue"); i++) {
         auto prev_size = map_.size();
         complex_object key = make_unique_object(objects_generator_);
         complex_object value = objects_generator_.next_value();
@@ -123,7 +144,7 @@ TEST_F(FilledMapTest, EmplaceNotExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, TryEmplaceExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("TryEmplaceExistingValue"); i++) {
         auto prev_size = map_.size();
         auto& [key, value] = *random_element(inserted_values_);
         complex_object new_value = make_unique_object(objects_generator_);
@@ -138,7 +159,7 @@ TEST_F(FilledMapTest, TryEmplaceExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, TryEmplaceNotExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("TryEmplaceNotExistingValue"); i++) {
         auto prev_size = map_.size();
         complex_object key = make_unique_object(objects_generator_);
         complex_object value = objects_generator_.next_value();
@@ -154,7 +175,7 @@ TEST_F(FilledMapTest, TryEmplaceNotExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, EraseExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("EraseExistingValue"); i++) {
         auto prev_size = map_.size();
         auto it = random_element(inserted_values_);
         auto& [key, value] = *it;
@@ -166,7 +187,7 @@ TEST_F(FilledMapTest, EraseExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, EraseNotExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("EraseNotExistingValue"); i++) {
         auto prev_size = map_.size();
         complex_object key = make_unique_object(objects_generator_);
         int count = map_.erase(key);
@@ -177,7 +198,7 @@ TEST_F(FilledMapTest, EraseNotExistingValue) {
 }
 TEST_F(FilledMapTest, EraseByIterator) {
     std::sort(inserted_values_.begin(), inserted_values_.end());
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("EraseByIterator"); i++) {
         auto prev_size = map_.size();
         auto random_it = random_element(inserted_values_);
         auto it = map_.begin();
@@ -191,7 +212,7 @@ TEST_F(FilledMapTest, EraseByIterator) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, CheckLookupExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("CheckLookupExistingValue"); i++) {
         auto& [key, value] = *random_element(inserted_values_);
         EXPECT_TRUE(map_.contains(key));
         EXPECT_EQ(map_.count(key), 1);
@@ -200,7 +221,7 @@ TEST_F(FilledMapTest, CheckLookupExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, CheckLookupNotExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("CheckLookupNotExistingValue"); i++) {
         complex_object key = make_unique_object(objects_generator_);
         EXPECT_FALSE(map_.contains(key));
         EXPECT_EQ(map_.count(key), 0);
@@ -209,7 +230,7 @@ TEST_F(FilledMapTest, CheckLookupNotExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, SubscriptOperatorForExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("SubscriptOperatorForExistingValue"); i++) {
         auto prev_size = map_.size();
         auto& [key, value] = *random_element(inserted_values_);
         EXPECT_EQ(map_[key], value);
@@ -222,7 +243,7 @@ TEST_F(FilledMapTest, SubscriptOperatorForExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, SubscriptOperatorForNotExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("SubscriptOperatorForNotExistingValue"); i++) {
         auto prev_size = map_.size();
         complex_object key = make_unique_object(objects_generator_);
         EXPECT_EQ(map_[key], complex_object());
@@ -234,7 +255,7 @@ TEST_F(FilledMapTest, SubscriptOperatorForNotExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, AtForExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("AtForExistingValue"); i++) {
         auto prev_size = map_.size();
         auto& [key, value] = *random_element(inserted_values_);
         EXPECT_EQ(map_.at(key), value);
@@ -247,7 +268,7 @@ TEST_F(FilledMapTest, AtForExistingValue) {
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
 TEST_F(FilledMapTest, AtForNotExistingValue) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i <  test_config.at("AtForNotExistingValue"); i++) {
         auto prev_size = map_.size();
         complex_object key = make_unique_object(objects_generator_);
         EXPECT_THROW(map_.at(key), std::out_of_range);
@@ -283,7 +304,7 @@ TEST_F(FilledMapTest, Clear) {
     EXPECT_TRUE(map_.empty());
     EXPECT_TRUE(polyndrom::verify_tree(map_));
 }
-TEST_F(FilledMapTest, IteratorDirectMove) {
+TEST_F(FilledMapTest, IteratorDirectPrefixMove) {
     std::sort(inserted_values_.begin(), inserted_values_.end());
     auto it = map_.begin();
     for (auto& [key, value] : inserted_values_) {
@@ -292,7 +313,7 @@ TEST_F(FilledMapTest, IteratorDirectMove) {
         ++it;
     }
 }
-TEST_F(FilledMapTest, IteratorReverseMove) {
+TEST_F(FilledMapTest, IteratorReversePrefixMove) {
     std::sort(inserted_values_.begin(), inserted_values_.end(), std::greater());
     auto it = map_.begin();
     for (int i = 0; i < n_ - 1; i++) {
@@ -302,5 +323,30 @@ TEST_F(FilledMapTest, IteratorReverseMove) {
         EXPECT_EQ(it->first, key);
         EXPECT_EQ(it->second, value);
         --it;
+    }
+}
+TEST_F(FilledMapTest, IteratorDirectPostfixMove) {
+    std::sort(inserted_values_.begin(), inserted_values_.end());
+    auto it = map_.begin();
+    for (auto& [key, value] : inserted_values_) {
+        EXPECT_EQ(it->first, key);
+        EXPECT_EQ(it->second, value);
+        auto prev_it = it++;
+        EXPECT_EQ(prev_it->first, key);
+        EXPECT_EQ(prev_it->second, value);
+    }
+}
+TEST_F(FilledMapTest, IteratorReversePostfixMove) {
+    std::sort(inserted_values_.begin(), inserted_values_.end(), std::greater());
+    auto it = map_.begin();
+    for (int i = 0; i < n_ - 1; i++) {
+        ++it;
+    }
+    for (auto& [key, value] : inserted_values_) {
+        EXPECT_EQ(it->first, key);
+        EXPECT_EQ(it->second, value);
+        auto prev_it = it--;
+        EXPECT_EQ(prev_it->first, key);
+        EXPECT_EQ(prev_it->second, value);
     }
 }
