@@ -1,6 +1,6 @@
 #include "acid_map.hpp"
 #include "tree_verifier.hpp"
-#include "util.hpp"
+#include "utils.hpp"
 
 #include "gtest/gtest.h"
 
