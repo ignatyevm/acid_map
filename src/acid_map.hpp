@@ -39,7 +39,7 @@ public:
         if (node == nullptr) {
             return end();
         }
-        return avl_tree_iterator(node);
+        return make_iterator(node);
     }
     template <typename K>
     mapped_type& operator[](K&& key) {
@@ -66,34 +66,34 @@ public:
         const key_type& key = value.first;
         auto [parent, existing_node] = find_node(root_, key);
         if (existing_node != nullptr) {
-            return std::make_pair(avl_tree_iterator(existing_node), false);
+            return std::make_pair(make_iterator(existing_node), false);
         }
-        node_ptr node = construct_node(std::forward<V>(value));
+        node_ptr node = construct_node(node_allocator_, std::forward<V>(value));
         insert_node(parent, node);
-        return std::make_pair(avl_tree_iterator(node), true);
+        return std::make_pair(make_iterator(node), true);
     }
     template <class ...Args>
     std::pair<iterator, bool> emplace(Args&& ...args) {
-        node_ptr node = construct_node(std::forward<Args>(args)...);
+        node_ptr node = construct_node(node_allocator_, std::forward<Args>(args)...);
         auto [parent, existing_node] = find_node(root_, node->key());
         if (existing_node != nullptr) {
-            destroy_node(node);
-            return std::make_pair(avl_tree_iterator(existing_node), false);
+            destroy_node(node_allocator_, node);
+            return std::make_pair(make_iterator(existing_node), false);
         }
         insert_node(parent, node);
-        return std::make_pair(avl_tree_iterator(node), true);
+        return std::make_pair(make_iterator(node), true);
     }
     template <class K, class ...Args>
     std::pair<iterator, bool> try_emplace(K&& key, Args&& ...args) {
         auto [parent, existing_node] = find_node(root_, key);
         if (existing_node != nullptr) {
-            return std::make_pair(avl_tree_iterator(existing_node), false);
+            return std::make_pair(make_iterator(existing_node), false);
         }
-        node_ptr node = construct_node(std::piecewise_construct,
+        node_ptr node = construct_node(node_allocator_, std::piecewise_construct,
                                        std::forward_as_tuple(std::forward<K>(key)),
                                        std::forward_as_tuple(std::forward<Args>(args)...));
         insert_node(parent, node);
-        return std::make_pair(avl_tree_iterator(node), true);
+        return std::make_pair(make_iterator(node), true);
     }
     size_type erase(const key_type& key) {
         auto [parent, node] = find_node(root_, key);
@@ -106,16 +106,16 @@ public:
     iterator erase(iterator pos) {
         node_ptr next = next_node(pos.node_);
         erase_node(pos.node_);
-        return avl_tree_iterator(next);
+        return make_iterator(next);
     }
     iterator begin() {
         if (root_ == nullptr) {
             return end();
         }
-        return avl_tree_iterator(min_node(root_));
+        return make_iterator(min_node(root_));
     }
     iterator end() {
-        return avl_tree_iterator();
+        return make_iterator();
     }
     size_type size() const {
         return size_;
@@ -140,28 +140,39 @@ private:
         using difference_type = size_t;
         using pointer = value_type*;
         using reference = value_type&;
-        avl_tree_iterator() = default;
-        avl_tree_iterator(const avl_tree_iterator& other) : node_(other.node_) {}
+        avl_tree_iterator(node_allocator_type& node_allocator) : node_allocator_(node_allocator) {}
+        avl_tree_iterator(const avl_tree_iterator& other) : node_allocator_(other.node_allocator_), node_(other.node_) {
+            update_ref_count(node_, 1);
+        }
         avl_tree_iterator& operator=(const avl_tree_iterator& other) {
-            node_ = other.node_;
+            if (this == &other) {
+                return *this;
+            }
+            acquire_node(other.node_);
             return *this;
         }
         iterator& operator++() {
-            node_ = next_node(node_);
+            acquire_node(next_node(node_));
+            while (node_->is_deleted_) {
+                acquire_node(next_node(node_));
+            }
             return *this;
         }
         iterator operator++(int) {
-            iterator other(node_);
-            node_ = next_node(node_);
+            iterator other(*this);
+            ++(*this);
             return other;
         }
         iterator& operator--() {
-            node_ = prev_node(node_);
+            acquire_node(prev_node(node_));
+            while (node_->is_deleted_) {
+                acquire_node(prev_node(node_));
+            }
             return *this;
         }
         iterator operator--(int) {
-            iterator other(node_);
-            node_ = prev_node(node_);
+            iterator other(*this);
+            --(*this);
             return other;
         }
         value_type& operator*() {
@@ -176,8 +187,27 @@ private:
         bool operator!=(iterator other) const {
             return node_ != other.node_;
         }
+        ~avl_tree_iterator() {
+            if (node_ == nullptr) {
+                return;
+            }
+            release_node(node_);
+        }
     private:
-        avl_tree_iterator(node_ptr node) : node_(node) {}
+        avl_tree_iterator(node_allocator_type& node_allocator, node_ptr node) : node_allocator_(node_allocator), node_(node) {
+            update_ref_count(node_, 1);
+        }
+        void acquire_node(node_ptr node) {
+            node_ptr prev_node = node_;
+            node_ = node;
+            update_ref_count(node_, 1);
+            release_node(prev_node);
+        }
+        void release_node(node_ptr node) {
+            update_ref_count(node, -1);
+            try_destroy_node(node_allocator_, node);
+        }
+        std::reference_wrapper<node_allocator_type> node_allocator_;
         node_ptr node_ = nullptr;
     };
     class avl_tree_node {
@@ -197,66 +227,114 @@ private:
         node_ptr right_ = nullptr;
         node_ptr parent_ = nullptr;
         int8_t height_ = 1;
+        int ref_count_ = 0;
+        bool is_deleted_ = false;
         value_type value_;
     };
     void insert_node(node_ptr where, node_ptr node) {
         ++size_;
         if (root_ == nullptr) {
             root_ = node;
+            update_ref_count(root_, 1);
             return;
         }
         auto [parent, _] = find_node(where, node->key());
-        node->parent_ = parent;
+        set_parent(node, parent);
         if (is_less(node->key(), parent->key())) {
-            parent->left_ = node;
+            set_left_child(parent, node);
         } else {
-            parent->right_ = node;
+            set_right_child(parent, node);
         }
         update_height(node->parent_);
         rebalance_path(node->parent_);
     }
     void erase_node(node_ptr node) {
+        if (node->is_deleted_) {
+            try_destroy_node(node_allocator_, node);
+            return;
+        }
         node_ptr parent = node->parent_;
         node_ptr replacement;
         node_ptr for_rebalance;
-        if (node->left_ == nullptr || node->right_ == nullptr) { ;
+        if (node->left_ == nullptr || node->right_ == nullptr) {
             if (node->left_ != nullptr) {
                 replacement = node->left_;
             } else {
                 replacement = node->right_;
             }
             if (replacement != nullptr) {
-                replacement->parent_ = parent;
+                // replacement->parent_ = parent;
+                set_parent(replacement, parent);
             }
             update_at_parent(parent, node, replacement);
             for_rebalance = parent;
         } else {
             replacement = min_node(node->right_);
             node_ptr replacement_parent = replacement->parent_;
-            replacement->left_ = node->left_;
+            // replacement->left_ = node->left_;
+            set_left_child(replacement, node->left_);
             if (node->left_ != nullptr) {
-                node->left_->parent_ = replacement;
+                // node->left_->parent_ = replacement;
+                set_parent(node->left_, replacement);
             }
             update_at_parent(parent, node, replacement);
             for_rebalance = replacement;
             if (node->right_ != replacement) {
                 if (replacement->right_ != nullptr) {
-                    replacement->right_->parent_ = replacement->parent_;
+                    // replacement->right_->parent_ = replacement->parent_;
+                    set_parent(replacement->right_, replacement->parent_);
                 }
-                replacement_parent->left_ = replacement->right_;
-                replacement->right_ = node->right_;
-                node->right_->parent_ = replacement;
+                // replacement_parent->left_ = replacement->right_;
+                set_left_child(replacement_parent, replacement->right_);
+                // replacement->right_ = node->right_;
+                set_right_child(replacement, node->right_);
+                // node->right_->parent_ = replacement;
+                set_parent(node->right_, replacement);
                 for_rebalance = replacement_parent;
             }
-            replacement->parent_ = parent;
+            // replacement->parent_ = parent;
+            set_parent(replacement, parent);
         }
+        // update_ref_count(node->parent_, -1);
+        // update_ref_count(replacement, -1);
+        node->is_deleted_ = true;
         if (node == root_) {
-            root_ = replacement;
+            // root_ = replacement;
+            update_root(replacement);
         }
         --size_;
         update_height(for_rebalance);
         rebalance_path(for_rebalance);
-        destroy_node(node);
+        try_destroy_node(node_allocator_, node);
+    }
+    static void set_parent(node_ptr node, node_ptr parent) {
+        update_ref_count(node->parent_, -1);
+        node->parent_ = parent;
+        update_ref_count(parent, 1);
+    }
+    static void set_left_child(node_ptr parent, node_ptr node) {
+        update_ref_count(parent->left_, -1);
+        parent->left_ = node;
+        update_ref_count(node, 1);
+    }
+    static void set_right_child(node_ptr parent, node_ptr node) {
+        update_ref_count(parent->right_, -1);
+        parent->right_ = node;
+        update_ref_count(node, 1);
+    }
+    void update_root(node_ptr new_root) {
+        if (root_ == new_root) {
+            return;
+        }
+        update_ref_count(root_, -1);
+        root_ = new_root;
+        update_ref_count(root_, 1);
+    }
+    static void update_ref_count(node_ptr node, int count) {
+        if (node == nullptr) {
+            return;
+        }
+        node->ref_count_ += count;
     }
     template <class K1, class K2>
     inline bool is_less(const K1& lhs, const K2& rhs) const {
@@ -271,6 +349,9 @@ private:
     }
     static inline bool is_right_child(node_ptr node) {
         return node->parent_->right_ == node;
+    }
+    inline iterator make_iterator(node_ptr node = nullptr) {
+        return avl_tree_iterator(node_allocator_, node);
     }
     template <class K>
     std::pair<node_ptr, node_ptr> find_node(node_ptr root, const K& key) const {
@@ -291,28 +372,38 @@ private:
             }
         }
     }
-    void update_at_parent(node_ptr parent, node_ptr old_node, node_ptr new_node) const {
+    void update_at_parent(node_ptr parent, node_ptr old_node, node_ptr new_node) {
         if (parent == nullptr) {
             return;
         }
         if (is_left_child(old_node)) {
-            parent->left_ = new_node;
+            // parent->left_ = new_node;
+            set_left_child(parent, new_node);
         } else {
-            parent->right_ = new_node;
+            // parent->right_ = new_node;
+            set_right_child(parent, new_node);
         }
     }
     template <class... Args>
-    node_ptr construct_node(Args&& ... args) const {
-        node_ptr node = std::allocator_traits<node_allocator_type>::allocate(node_allocator_, 1);
-        std::allocator_traits<node_allocator_type>::construct(node_allocator_, node, std::forward<Args>(args)...);
+    static node_ptr construct_node(node_allocator_type node_allocator, Args&& ... args) {
+        node_ptr node = std::allocator_traits<node_allocator_type>::allocate(node_allocator, 1);
+        std::allocator_traits<node_allocator_type>::construct(node_allocator, node, std::forward<Args>(args)...);
         return node;
     }
-    void destroy_node(node_ptr node) const {
-        std::allocator_traits<node_allocator_type>::destroy(node_allocator_, node);
-        std::allocator_traits<node_allocator_type>::deallocate(node_allocator_, node, 1);
+    static void destroy_node(node_allocator_type node_allocator, node_ptr node) {
+        std::allocator_traits<node_allocator_type>::destroy(node_allocator, node);
+        std::allocator_traits<node_allocator_type>::deallocate(node_allocator, node, 1);
+    }
+    static void try_destroy_node(node_allocator_type& node_allocator, node_ptr node) {
+        if (node->is_deleted_ && node->ref_count_ == 0) {
+            update_ref_count(node->parent_, -1);
+            update_ref_count(node->left_, -1);
+            update_ref_count(node->right_, -1);
+            destroy_node(node_allocator, node);
+        }
     }
     node_ptr rotate_left(node_ptr node) {
-        node_ptr right_child = node->right_;
+        /*node_ptr right_child = node->right_;
         if (node->right_ != nullptr) {
             node->right_ = right_child->left_;
         }
@@ -324,10 +415,23 @@ private:
         node->parent_ = right_child;
         update_height(node);
         update_height(right_child);
+        return right_child;*/
+        node_ptr right_child = node->right_;
+        if (node->right_ != nullptr) {
+            set_right_child(node, right_child->left_);
+        }
+        if (right_child->left_ != nullptr) {
+            set_parent(right_child->left_, node);
+        }
+        set_left_child(right_child, node);
+        set_parent(right_child, node->parent_);
+        set_parent(node, right_child);
+        update_height(node);
+        update_height(right_child);
         return right_child;
     }
     node_ptr rotate_right(node_ptr node) {
-        node_ptr left_child = node->left_;
+        /*node_ptr left_child = node->left_;
         if (node->left_ != nullptr) {
             node->left_ = left_child->right_;
         }
@@ -337,6 +441,19 @@ private:
         left_child->right_ = node;
         left_child->parent_ = node->parent_;
         node->parent_ = left_child;
+        update_height(node);
+        update_height(left_child);
+        return left_child;*/
+        node_ptr left_child = node->left_;
+        if (node->left_ != nullptr) {
+            set_left_child(node, left_child->right_);
+        }
+        if (left_child->right_ != nullptr) {
+            set_parent(left_child->right_, node);
+        }
+        set_right_child(left_child, node);
+        set_parent(left_child, node->parent_);
+        set_parent(node, left_child);
         update_height(node);
         update_height(left_child);
         return left_child;
@@ -362,12 +479,14 @@ private:
         int bf = balance_factor(node);
         if (bf == 2) {
             if (balance_factor(node->left_) == -1) {
-                node->left_ = rotate_left(node->left_);
+                set_left_child(node, rotate_left(node->left_));
+                // node->left_ = rotate_left(node->left_);
             }
             node = rotate_right(node);
         } else if (bf == -2) {
             if (balance_factor(node->right_) == 1) {
-                node->right_ = rotate_right(node->right_);
+                // node->right_ = rotate_right(node->right_);
+                set_right_child(node, rotate_right(node->right_));
             }
             node = rotate_left(node);
         }
@@ -385,13 +504,16 @@ private:
             }
             node = rebalance(node);
             if (pos) {
-                node->parent_->left_ = node;
+                // node->parent_->left_ = node;
+                set_left_child(node->parent_, node);
             } else {
-                node->parent_->right_ = node;
+                // node->parent_->right_ = node;
+                set_right_child(node->parent_, node);
             }
             node = node->parent_;
         }
-        root_ = rebalance(root_);
+        // root_ = rebalance(root_);
+        update_root(rebalance(root_));
         return node;
     }
     static node_ptr min_node(node_ptr root) {
@@ -442,7 +564,7 @@ private:
         }
         destroy_subtree(root->left_);
         destroy_subtree(root->right_);
-        destroy_node(root);
+        destroy_node(node_allocator_, root);
     }
     node_ptr root_ = nullptr;
     size_type size_ = 0;
