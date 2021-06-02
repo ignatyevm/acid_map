@@ -17,6 +17,7 @@ private:
     class tree_verifier;
     class avl_tree_node;
     class avl_tree_iterator;
+    using acid_map_type = acid_map<Key, T, Compare, Allocator>;
     using node_ptr = avl_tree_node*;
     using node_allocator_type = typename std::allocator_traits<Allocator>::template rebind_alloc<avl_tree_node>;
 public:
@@ -48,7 +49,7 @@ public:
     mapped_type& at(const key_type& key) {
         auto [parent, node] = find_node(root_, key);
         if (node == nullptr) {
-            throw std::out_of_range("Key does not exists");
+            throw std::out_of_range("Key does not exist");
         }
         return node->value_.second;
     }
@@ -104,8 +105,9 @@ public:
         return 1;
     }
     iterator erase(iterator pos) {
-        node_ptr next = next_node(pos.node_);
-        erase_node(pos.node_);
+        node_ptr node = pos.node_holder_.node();
+        node_ptr next = next_node(node);
+        erase_node(node);
         return make_iterator(next);
     }
     iterator begin() {
@@ -132,6 +134,51 @@ public:
         clear();
     }
 private:
+    class node_holder {
+    public:
+        node_holder() = default;
+        node_holder(const node_holder& other) : node_allocator_(other.node_allocator_) {
+            acquire(other.node_);
+        }
+        node_holder& operator=(const node_holder& other) {
+            acquire(other.node_);
+            return *this;
+        }
+        node_holder(node_allocator_type& node_allocator, node_ptr node) : node_allocator_(node_allocator) {
+            acquire(node);
+        }
+        void acquire(node_ptr node) {
+            release();
+            node_ = node;
+            update_ref_count(node_, 1);
+        }
+        void release() {
+            update_ref_count(node_, -1);
+            try_destroy_node(node_);
+            node_ = nullptr;
+        }
+        node_ptr node() const {
+            return node_;
+        }
+        ~node_holder() {
+            release();
+        }
+    private:
+        void try_destroy_node(node_ptr node) {
+            if (node == nullptr || node->ref_count_ != 0) {
+                return;
+            }
+            for (node_ptr linked_node : {node->left_, node->right_, node->parent_}) {
+                update_ref_count(linked_node, -1);
+                try_destroy_node(linked_node);
+            }
+            if (node->ref_count_ == 0) {
+                destroy_node(node_allocator_, node);
+            }
+        }
+        node_ptr node_ = nullptr;
+        node_allocator_type& node_allocator_;
+    };
     class avl_tree_iterator {
     public:
         friend acid_map;
@@ -140,22 +187,23 @@ private:
         using difference_type = size_t;
         using pointer = value_type*;
         using reference = value_type&;
-        avl_tree_iterator(node_allocator_type& node_allocator) : node_allocator_(node_allocator) {}
-        avl_tree_iterator(const avl_tree_iterator& other) : node_allocator_(other.node_allocator_), node_(other.node_) {
-            update_ref_count(node_, 1);
-        }
+        avl_tree_iterator(acid_map_type& map) : map_(map), node_holder_(map.node_allocator_) {}
+        avl_tree_iterator(const avl_tree_iterator& other) : map_(other.map_), node_holder_(other.node_holder_) {}
         avl_tree_iterator& operator=(const avl_tree_iterator& other) {
             if (this == &other) {
                 return *this;
             }
-            acquire_node(other.node_);
+            node_holder_ = other.node_holder_;
             return *this;
         }
         iterator& operator++() {
-            acquire_node(next_node(node_));
-            while (node_->is_deleted_) {
-                acquire_node(next_node(node_));
+            node_ptr next = nullptr;
+            if (node_holder_.node()->is_deleted_) {
+                next = map_.right_bound_node(node_holder_.node()->key());
+            } else {
+                next = next_node(node_holder_.node());
             }
+            node_holder_.acquire(next);
             return *this;
         }
         iterator operator++(int) {
@@ -164,10 +212,8 @@ private:
             return other;
         }
         iterator& operator--() {
-            acquire_node(prev_node(node_));
-            while (node_->is_deleted_) {
-                acquire_node(prev_node(node_));
-            }
+            node_ptr prev = map_.left_bound_node(node_holder_.node()->key());
+            node_holder_.acquire(prev);
             return *this;
         }
         iterator operator--(int) {
@@ -176,39 +222,22 @@ private:
             return other;
         }
         value_type& operator*() {
-            return node_->value_;
+            return node_holder_.node()->value_;
         }
         value_type* operator->() {
-            return &node_->value_;
+            return &node_holder_.node()->value_;
         }
         bool operator==(iterator other) const {
-            return node_ == other.node_;
+            return node_holder_.node() == other.node_holder_.node();
         }
         bool operator!=(iterator other) const {
-            return node_ != other.node_;
+            return !(*this == other);
         }
-        ~avl_tree_iterator() {
-            if (node_ == nullptr) {
-                return;
-            }
-            release_node(node_);
-        }
+        ~avl_tree_iterator() = default;
     private:
-        avl_tree_iterator(node_allocator_type& node_allocator, node_ptr node) : node_allocator_(node_allocator), node_(node) {
-            update_ref_count(node_, 1);
-        }
-        void acquire_node(node_ptr node) {
-            node_ptr prev_node = node_;
-            node_ = node;
-            update_ref_count(node_, 1);
-            release_node(prev_node);
-        }
-        void release_node(node_ptr node) {
-            update_ref_count(node, -1);
-            try_destroy_node(node_allocator_, node);
-        }
-        std::reference_wrapper<node_allocator_type> node_allocator_;
-        node_ptr node_ = nullptr;
+        avl_tree_iterator(acid_map_type& map, node_ptr node) : map_(map), node_holder_(map.node_allocator_, node) {}
+        acid_map_type& map_;
+        node_holder node_holder_;
     };
     class avl_tree_node {
     public:
@@ -249,8 +278,8 @@ private:
         rebalance_path(node->parent_);
     }
     void erase_node(node_ptr node) {
+        node_holder holder(node_allocator_, node);
         if (node->is_deleted_) {
-            try_destroy_node(node_allocator_, node);
             return;
         }
         node_ptr parent = node->parent_;
@@ -263,7 +292,6 @@ private:
                 replacement = node->right_;
             }
             if (replacement != nullptr) {
-                // replacement->parent_ = parent;
                 set_parent(replacement, parent);
             }
             update_at_parent(parent, node, replacement);
@@ -271,58 +299,81 @@ private:
         } else {
             replacement = min_node(node->right_);
             node_ptr replacement_parent = replacement->parent_;
-            // replacement->left_ = node->left_;
             set_left_child(replacement, node->left_);
             if (node->left_ != nullptr) {
-                // node->left_->parent_ = replacement;
                 set_parent(node->left_, replacement);
             }
             update_at_parent(parent, node, replacement);
             for_rebalance = replacement;
             if (node->right_ != replacement) {
                 if (replacement->right_ != nullptr) {
-                    // replacement->right_->parent_ = replacement->parent_;
                     set_parent(replacement->right_, replacement->parent_);
                 }
-                // replacement_parent->left_ = replacement->right_;
                 set_left_child(replacement_parent, replacement->right_);
-                // replacement->right_ = node->right_;
                 set_right_child(replacement, node->right_);
-                // node->right_->parent_ = replacement;
                 set_parent(node->right_, replacement);
                 for_rebalance = replacement_parent;
             }
-            // replacement->parent_ = parent;
             set_parent(replacement, parent);
         }
-        // update_ref_count(node->parent_, -1);
-        // update_ref_count(replacement, -1);
         node->is_deleted_ = true;
         if (node == root_) {
-            // root_ = replacement;
             update_root(replacement);
         }
         --size_;
         update_height(for_rebalance);
         rebalance_path(for_rebalance);
-        try_destroy_node(node_allocator_, node);
     }
-    static void set_parent(node_ptr node, node_ptr parent) {
+    template <class K>
+    node_ptr left_bound_node(const K& key) {
+        node_ptr node = root_;
+        node_ptr left_bound = nullptr;
+        while (node != nullptr) {
+            if (is_equal(node->key(), key)) {
+                return prev_node(node);
+            }
+            if (is_less(key, node->key())) {
+                node = node->left_;
+            } else {
+                left_bound = node;
+                node = node->right_;
+            }
+        }
+        return left_bound;
+    }
+    template <class K>
+    node_ptr right_bound_node(const K& key) {
+        node_ptr node = root_;
+        node_ptr right_bound = nullptr;
+        while (node != nullptr) {
+            if (is_equal(node->key(), key)) {
+                return next_node(node);
+            }
+            if (is_less(key, node->key())) {
+                right_bound = node;
+                node = node->left_;
+            } else {
+                node = node->right_;
+            }
+        }
+        return right_bound;
+    }
+    inline void set_parent(node_ptr node, node_ptr parent) {
         update_ref_count(node->parent_, -1);
         node->parent_ = parent;
         update_ref_count(parent, 1);
     }
-    static void set_left_child(node_ptr parent, node_ptr node) {
+    inline void set_left_child(node_ptr parent, node_ptr node) {
         update_ref_count(parent->left_, -1);
         parent->left_ = node;
         update_ref_count(node, 1);
     }
-    static void set_right_child(node_ptr parent, node_ptr node) {
+    inline void set_right_child(node_ptr parent, node_ptr node) {
         update_ref_count(parent->right_, -1);
         parent->right_ = node;
         update_ref_count(node, 1);
     }
-    void update_root(node_ptr new_root) {
+    inline void update_root(node_ptr new_root) {
         if (root_ == new_root) {
             return;
         }
@@ -330,7 +381,7 @@ private:
         root_ = new_root;
         update_ref_count(root_, 1);
     }
-    static void update_ref_count(node_ptr node, int count) {
+    static inline void update_ref_count(node_ptr node, int count) {
         if (node == nullptr) {
             return;
         }
@@ -351,7 +402,7 @@ private:
         return node->parent_->right_ == node;
     }
     inline iterator make_iterator(node_ptr node = nullptr) {
-        return avl_tree_iterator(node_allocator_, node);
+        return avl_tree_iterator(*this, node);
     }
     template <class K>
     std::pair<node_ptr, node_ptr> find_node(node_ptr root, const K& key) const {
@@ -377,10 +428,8 @@ private:
             return;
         }
         if (is_left_child(old_node)) {
-            // parent->left_ = new_node;
             set_left_child(parent, new_node);
         } else {
-            // parent->right_ = new_node;
             set_right_child(parent, new_node);
         }
     }
@@ -394,28 +443,7 @@ private:
         std::allocator_traits<node_allocator_type>::destroy(node_allocator, node);
         std::allocator_traits<node_allocator_type>::deallocate(node_allocator, node, 1);
     }
-    static void try_destroy_node(node_allocator_type& node_allocator, node_ptr node) {
-        if (node->is_deleted_ && node->ref_count_ == 0) {
-            update_ref_count(node->parent_, -1);
-            update_ref_count(node->left_, -1);
-            update_ref_count(node->right_, -1);
-            destroy_node(node_allocator, node);
-        }
-    }
     node_ptr rotate_left(node_ptr node) {
-        /*node_ptr right_child = node->right_;
-        if (node->right_ != nullptr) {
-            node->right_ = right_child->left_;
-        }
-        if (right_child->left_ != nullptr) {
-            right_child->left_->parent_ = node;
-        }
-        right_child->left_ = node;
-        right_child->parent_ = node->parent_;
-        node->parent_ = right_child;
-        update_height(node);
-        update_height(right_child);
-        return right_child;*/
         node_ptr right_child = node->right_;
         if (node->right_ != nullptr) {
             set_right_child(node, right_child->left_);
@@ -431,19 +459,6 @@ private:
         return right_child;
     }
     node_ptr rotate_right(node_ptr node) {
-        /*node_ptr left_child = node->left_;
-        if (node->left_ != nullptr) {
-            node->left_ = left_child->right_;
-        }
-        if (left_child->right_ != nullptr) {
-            left_child->right_->parent_ = node;
-        }
-        left_child->right_ = node;
-        left_child->parent_ = node->parent_;
-        node->parent_ = left_child;
-        update_height(node);
-        update_height(left_child);
-        return left_child;*/
         node_ptr left_child = node->left_;
         if (node->left_ != nullptr) {
             set_left_child(node, left_child->right_);
@@ -480,12 +495,10 @@ private:
         if (bf == 2) {
             if (balance_factor(node->left_) == -1) {
                 set_left_child(node, rotate_left(node->left_));
-                // node->left_ = rotate_left(node->left_);
             }
             node = rotate_right(node);
         } else if (bf == -2) {
             if (balance_factor(node->right_) == 1) {
-                // node->right_ = rotate_right(node->right_);
                 set_right_child(node, rotate_right(node->right_));
             }
             node = rotate_left(node);
@@ -504,15 +517,12 @@ private:
             }
             node = rebalance(node);
             if (pos) {
-                // node->parent_->left_ = node;
                 set_left_child(node->parent_, node);
             } else {
-                // node->parent_->right_ = node;
                 set_right_child(node->parent_, node);
             }
             node = node->parent_;
         }
-        // root_ = rebalance(root_);
         update_root(rebalance(root_));
         return node;
     }
