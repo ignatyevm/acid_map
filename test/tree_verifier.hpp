@@ -31,7 +31,7 @@ public:
         node_ptr left = node->left_;
         node_ptr right = node->right_;
         if (parent != nullptr) {
-            if (tree_.is_left_child(node) && parent->left_ != node) {
+            if (node.is_left_child() && parent->left_ != node) {
                 fails_ostream_ << "parent left node: " << parent->value_.first << " ";
                 if (parent->left_ == nullptr) {
                     fails_ostream_ << parent->left_->value_.first << " ";
@@ -39,7 +39,7 @@ public:
                 fails_ostream_ << node->value_.first << std::endl;
                 return false;
             }
-            if (tree_.is_right_child(node) && parent->right_ != node) {
+            if (node.is_right_child() && parent->right_ != node) {
                 fails_ostream_ << "parent right node: " << parent->value_.first << " ";
                 if (parent->right_ == nullptr) {
                     fails_ostream_ << parent->right_->value_.first << " ";
