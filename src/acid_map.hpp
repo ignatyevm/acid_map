@@ -105,6 +105,9 @@ public:
         return 1;
     }
     iterator erase(iterator pos) {
+        if (pos == end()) {
+            return pos;
+        }
         node_ptr next = pos.node_.next();
         erase_node(pos.node_);
         return iterator(next);

@@ -34,6 +34,7 @@ public:
     node_pointer& operator=(std::nullptr_t) {
         release();
         node_ = nullptr;
+        allocator_= nullptr;
         return *this;
     }
     node_pointer(const node_pointer& other) : allocator_(other.allocator_) {
@@ -79,18 +80,12 @@ public:
         if (node_->ref_count_ == 0) {
             destroy();
         }
-        /*
-        if (node_->ref_count_ == 0 ||
-            (node_->ref_count_ == 1 && (node_->left_->parent_ == *this || node_->right_->parent_ == *this) ||
-            (node_->ref_count_ == 2 && node_->left_->parent_ == *this && node_->right_->parent_ == *this) {
-            destroy();
-        }
-        */
     }
     void destroy() {
         std::allocator_traits<allocator_type>::destroy(*allocator_, node_);
         std::allocator_traits<allocator_type>::deallocate(*allocator_, node_, 1);
         node_ = nullptr;
+        allocator_ = nullptr;
     }
     void force_destroy() {
         if (node_ == nullptr) {
@@ -106,6 +101,7 @@ public:
             node_->parent_ = nullptr;
             destroy();
             node_ = nullptr;
+            allocator_ = nullptr;
         }
     }
     void update_ref_count(int n) {

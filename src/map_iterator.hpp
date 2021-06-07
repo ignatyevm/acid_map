@@ -39,6 +39,9 @@ public:
         --*this;
         return other;
     }
+    bool is_deleted() const {
+        return node_->is_deleted_;
+    }
     value_type& operator*() {
         return node_->value_;
     }
