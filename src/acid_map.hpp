@@ -105,7 +105,7 @@ public:
         return 1;
     }
     iterator erase(iterator pos) {
-        node_ptr next = next_node(pos.node_);
+        node_ptr next = pos.node_.next();
         erase_node(pos.node_);
         return iterator(next);
     }
@@ -113,7 +113,7 @@ public:
         if (root_ == nullptr) {
             return end();
         }
-        return iterator(min_node(root_));
+        return iterator(root_.min());
     }
     iterator end() {
         return iterator();
@@ -125,11 +125,15 @@ public:
         return size_ == 0;
     }
     void clear() {
-        root_.force_destroy();
-        size_ = 0;
+        auto it1 = begin();
+        while (it1 != end()) {
+            auto it2 = it1++;
+            erase(it2);
+        }
+        root_ = nullptr;
     }
     ~acid_map() {
-        clear();
+        root_.force_destroy();
     }
 private:
     void insert_node(node_ptr where, node_ptr node) {
@@ -149,6 +153,9 @@ private:
         rebalance_path(node->parent_);
     }
     void erase_node(node_ptr node) {
+        if (node == nullptr || node->is_deleted_) {
+            return;
+        }
         node_ptr parent = node->parent_;
         node_ptr replacement;
         node_ptr for_rebalance;
@@ -164,7 +171,7 @@ private:
             update_at_parent(parent, node, replacement);
             for_rebalance = parent;
         } else {
-            replacement = min_node(node->right_);
+            replacement = node->right_.min();
             node_ptr replacement_parent = replacement->parent_;
             replacement->left_ = node->left_;
             if (node->left_ != nullptr) {
@@ -199,12 +206,6 @@ private:
     inline bool is_equal(const K1& lhs, const K2& rhs) const {
         return !is_less(lhs, rhs) && !is_less(rhs, lhs);
     }
-    static inline bool is_left_child(node_ptr node) {
-        return node->parent_->left_ == node;
-    }
-    static inline bool is_right_child(node_ptr node) {
-        return node->parent_->right_ == node;
-    }
     template <class K>
     std::pair<node_ptr, node_ptr> find_node(node_ptr root, const K& key) const {
         node_ptr parent = nullptr;
@@ -228,7 +229,7 @@ private:
         if (parent == nullptr) {
             return;
         }
-        if (is_left_child(old_node)) {
+        if (old_node.is_left_child()) {
             parent->left_ = new_node;
         } else {
             parent->right_ = new_node;
@@ -303,7 +304,7 @@ private:
         }
         while (node != root_) {
             bool pos = true;
-            if (is_right_child(node)) {
+            if (node.is_right_child()) {
                 pos = false;
             }
             node = rebalance(node);
@@ -316,48 +317,6 @@ private:
         }
         root_ = rebalance(root_);
         return node;
-    }
-    static node_ptr min_node(node_ptr root) {
-        while (root->left_ != nullptr) {
-            root = root->left_;
-        }
-        return root;
-    }
-    static node_ptr max_node(node_ptr root) {
-        while (root->right_ != nullptr) {
-            root = root->right_;
-        }
-        return root;
-    }
-    static node_ptr nearest_left_ancestor(node_ptr node) {
-        while (node != nullptr) {
-            if (node->parent_ != nullptr && is_left_child(node)) {
-                return node->parent_;
-            }
-            node = node->parent_;
-        }
-        return nullptr;
-    }
-    static node_ptr nearest_right_ancestor(node_ptr node) {
-        while (node != nullptr) {
-            if (node->parent_ != nullptr && is_right_child(node)) {
-                return node->parent_;
-            }
-            node = node->parent_;
-        }
-        return nullptr;
-    }
-    static node_ptr prev_node(node_ptr node) {
-        if (node->left_ != nullptr) {
-            return max_node(node->left_);
-        }
-        return nearest_right_ancestor(node);
-    }
-    static node_ptr next_node(node_ptr node) {
-        if (node->right_ != nullptr) {
-            return min_node(node->right_);
-        }
-        return nearest_left_ancestor(node);
     }
     node_ptr root_ = nullptr;
     size_type size_ = 0;

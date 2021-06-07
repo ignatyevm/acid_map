@@ -22,21 +22,21 @@ public:
         return *this;
     }
     map_iterator& operator++() {
-        node_ = map_type::next_node(node_);
+        node_ = node_.next();
         return *this;
     }
     map_iterator operator++(int) {
         map_iterator other(node_);
-        node_ = map_type::next_node(node_);
+        ++*this;
         return other;
     }
     map_iterator& operator--() {
-        node_ = map_type::prev_node(node_);
+        node_ = node_.prev();
         return *this;
     }
     map_iterator operator--(int) {
         map_iterator other(node_);
-        node_ = map_type::prev_node(node_);
+        --*this;
         return other;
     }
     value_type& operator*() {
