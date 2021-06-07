@@ -7,7 +7,6 @@
 
 class complex_object {
 public:
-    //friend std::ostream& operator<<(std::ostream& os, const complex_object& key);
     complex_object();
     complex_object(const complex_object& other);
     complex_object& operator=(const complex_object& other);
@@ -61,7 +60,7 @@ private:
 
 template <class C>
 typename C::iterator random_element(C& c) {
-    int_generator generator(0, (int) c.size() - 3);
+    int_generator generator(0, (int) c.size() - 1);
     auto it = c.begin();
     std::advance(it, generator.next_value());
     return it;
