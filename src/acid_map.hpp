@@ -33,10 +33,10 @@ public:
     using pointer = typename std::allocator_traits<Allocator>::pointer;
     using const_pointer = typename std::allocator_traits<Allocator>::const_pointer;
     using iterator = map_iterator<self_type>;
-    acid_map(const allocator_type& allocator = allocator_type()) : node_allocator_(allocator) {}
+    acid_map(const allocator_type& allocator = allocator_type()) : node_allocator(allocator) {}
     template <class K>
     iterator find(const K& key) {
-        auto [parent, node] = find_node(root_, key);
+        auto [parent, node] = find_node(root, key);
         if (node == nullptr) {
             return end();
         }
@@ -47,11 +47,11 @@ public:
         return try_emplace(std::forward<K>(key)).first->second;
     }
     mapped_type& at(const key_type& key) {
-        auto [parent, node] = find_node(root_, key);
+        auto [parent, node] = find_node(root, key);
         if (node == nullptr) {
             throw std::out_of_range("Key does not exists");
         }
-        return node->value_.second;
+        return node->value.second;
     }
     template <class K>
     bool contains(const K& key) const {
@@ -59,26 +59,25 @@ public:
     }
     template <class K>
     size_type count(const K& key) const {
-        auto [parent, node] = find_node(root_, key);
+        auto [parent, node] = find_node(root, key);
         return static_cast<size_type>(node != nullptr);
     }
     template <class V>
     std::pair<iterator, bool> insert(V&& value) {
         const key_type& key = value.first;
-        auto [parent, existing_node] = find_node(root_, key);
+        auto [parent, existing_node] = find_node(root, key);
         if (existing_node != nullptr) {
             return std::make_pair(iterator(existing_node), false);
         }
-        node_ptr node = node_ptr::construct_node(node_allocator_, std::forward<V>(value));
+        node_ptr node = node_ptr(node_allocator, std::forward<V>(value));
         insert_node(parent, node);
         return std::make_pair(iterator(node), true);
     }
     template <class ...Args>
     std::pair<iterator, bool> emplace(Args&& ...args) {
-        node_ptr node = node_ptr::construct_node(node_allocator_, std::forward<Args>(args)...);
-        auto [parent, existing_node] = find_node(root_, node->key());
+        node_ptr node(node_allocator, std::forward<Args>(args)...);
+        auto [parent, existing_node] = find_node(root, node->key());
         if (existing_node != nullptr) {
-            node.destroy();
             return std::make_pair(iterator(existing_node), false);
         }
         insert_node(parent, node);
@@ -86,18 +85,18 @@ public:
     }
     template <class K, class ...Args>
     std::pair<iterator, bool> try_emplace(K&& key, Args&& ...args) {
-        auto [parent, existing_node] = find_node(root_, key);
+        auto [parent, existing_node] = find_node(root, key);
         if (existing_node != nullptr) {
             return std::make_pair(iterator(existing_node), false);
         }
-        node_ptr node = node_ptr::construct_node(node_allocator_, std::piecewise_construct,
-                                       std::forward_as_tuple(std::forward<K>(key)),
-                                       std::forward_as_tuple(std::forward<Args>(args)...));
+        node_ptr node = node_ptr(node_allocator, std::piecewise_construct,
+                                                 std::forward_as_tuple(std::forward<K>(key)),
+                                                 std::forward_as_tuple(std::forward<Args>(args)...));
         insert_node(parent, node);
         return std::make_pair(iterator(node), true);
     }
     size_type erase(const key_type& key) {
-        auto [parent, node] = find_node(root_, key);
+        auto [parent, node] = find_node(root, key);
         if (node == nullptr) {
             return 0;
         }
@@ -108,24 +107,24 @@ public:
         if (pos == end()) {
             return pos;
         }
-        node_ptr next = pos.node_.next();
-        erase_node(pos.node_);
+        node_ptr next = pos.node.next();
+        erase_node(pos.node);
         return iterator(next);
     }
     iterator begin() {
-        if (root_ == nullptr) {
+        if (root == nullptr) {
             return end();
         }
-        return iterator(root_.min());
+        return iterator(root.min());
     }
     iterator end() {
         return iterator();
     }
     size_type size() const {
-        return size_;
+        return map_size;
     }
     bool empty() const {
-        return size_ == 0;
+        return map_size == 0;
     }
     void clear() {
         auto it1 = begin();
@@ -133,86 +132,88 @@ public:
             auto it2 = it1++;
             erase(it2);
         }
-        root_ = nullptr;
+        root = nullptr;
     }
     ~acid_map() {
-        root_.force_destroy();
+        root.force_destroy();
     }
 private:
     void insert_node(node_ptr where, node_ptr node) {
-        ++size_;
-        if (root_ == nullptr) {
-            root_ = node;
+        ++map_size;
+        if (root == nullptr) {
+            root = node;
             return;
         }
         auto [parent, _] = find_node(where, node->key());
-        node->parent_ = parent;
+        node->parent = parent;
         if (is_less(node->key(), parent->key())) {
-            parent->left_ = node;
+            parent->left = node;
         } else {
-            parent->right_ = node;
+            parent->right = node;
         }
-        update_height(node->parent_);
-        rebalance_path(node->parent_);
+        update_height(node->parent);
+        rebalance_path(node->parent);
     }
     void erase_node(node_ptr node) {
-        if (node == nullptr || node->is_deleted_) {
+        if (node == nullptr || node->is_deleted) {
             return;
         }
-        node_ptr parent = node->parent_;
+        node_ptr parent = node->parent;
         node_ptr replacement;
         node_ptr for_rebalance;
-        if (node->left_ == nullptr || node->right_ == nullptr) {
-            if (node->left_ != nullptr) {
-                replacement = node->left_;
+        if (node->left == nullptr || node->right == nullptr) {
+            if (node->left != nullptr) {
+                replacement = node->left;
             } else {
-                replacement = node->right_;
+                replacement = node->right;
             }
             if (replacement != nullptr) {
-                replacement->parent_ = parent;
+                replacement->parent = parent;
             }
             update_at_parent(parent, node, replacement);
             for_rebalance = parent;
         } else {
-            replacement = node->right_.min();
-            node_ptr replacement_parent = replacement->parent_;
-            replacement->left_ = node->left_;
-            if (node->left_ != nullptr) {
-                node->left_->parent_ = replacement;
+            replacement = node->right.min();
+            node_ptr replacement_parent = replacement->parent;
+            replacement->left = node->left;
+            if (node->left != nullptr) {
+                node->left->parent = replacement;
             }
             update_at_parent(parent, node, replacement);
             for_rebalance = replacement;
-            if (node->right_ != replacement) {
-                if (replacement->right_ != nullptr) {
-                    replacement->right_->parent_ = replacement->parent_;
+            if (node->right != replacement) {
+                if (replacement->right != nullptr) {
+                    replacement->right->parent = replacement->parent;
                 }
-                replacement_parent->left_ = replacement->right_;
-                replacement->right_ = node->right_;
-                node->right_->parent_ = replacement;
+                replacement_parent->left = replacement->right;
+                replacement->right = node->right;
+                node->right->parent = replacement;
                 for_rebalance = replacement_parent;
             }
-            replacement->parent_ = parent;
+            replacement->parent = parent;
         }
-        node.make_deleted();
-        if (node == root_) {
-            root_ = replacement;
+        node->left = nullptr;
+        node->right = nullptr;
+        node->is_deleted = true;
+        if (node == root) {
+            root = replacement;
         }
-        --size_;
+        --map_size;
         update_height(for_rebalance);
         rebalance_path(for_rebalance);
     }
     template <class K1, class K2>
     inline bool is_less(const K1& lhs, const K2& rhs) const {
-        return comparator_(lhs, rhs);
+        return comparator(lhs, rhs);
     }
     template <class K1, class K2>
     inline bool is_equal(const K1& lhs, const K2& rhs) const {
         return !is_less(lhs, rhs) && !is_less(rhs, lhs);
     }
     template <class K>
-    std::pair<node_ptr, node_ptr> find_node(node_ptr root, const K& key) const {
+    std::pair<node_ptr, node_ptr> find_node(node_ptr where, const K& key) const {
         node_ptr parent = nullptr;
-        node_ptr node = root;
+        node_ptr node = where;
         while (true) {
             if (node == nullptr) {
                 return std::make_pair(parent, node);
@@ -222,9 +223,9 @@ private:
             }
             parent = node;
             if (is_less(key, node->key())) {
-                node = node->left_;
+                node = node->left;
             } else {
-                node = node->right_;
+                node = node->right;
             }
         }
     }
@@ -233,37 +234,37 @@ private:
             return;
         }
         if (old_node.is_left_child()) {
-            parent->left_ = new_node;
+            parent->left = new_node;
         } else {
-            parent->right_ = new_node;
+            parent->right = new_node;
         }
     }
     node_ptr rotate_left(node_ptr node) {
-        node_ptr right_child = node->right_;
-        if (node->right_ != nullptr) {
-            node->right_ = right_child->left_;
+        node_ptr right_child = node->right;
+        if (node->right != nullptr) {
+            node->right = right_child->left;
         }
-        if (right_child->left_ != nullptr) {
-            right_child->left_->parent_ = node;
+        if (right_child->left != nullptr) {
+            right_child->left->parent = node;
         }
-        right_child->left_ = node;
-        right_child->parent_ = node->parent_;
-        node->parent_ = right_child;
+        right_child->left = node;
+        right_child->parent = node->parent;
+        node->parent = right_child;
         update_height(node);
         update_height(right_child);
         return right_child;
     }
     node_ptr rotate_right(node_ptr node) {
-        node_ptr left_child = node->left_;
-        if (node->left_ != nullptr) {
-            node->left_ = left_child->right_;
+        node_ptr left_child = node->left;
+        if (node->left != nullptr) {
+            node->left = left_child->right;
         }
-        if (left_child->right_ != nullptr) {
-            left_child->right_->parent_ = node;
+        if (left_child->right != nullptr) {
+            left_child->right->parent = node;
         }
-        left_child->right_ = node;
-        left_child->parent_ = node->parent_;
-        node->parent_ = left_child;
+        left_child->right = node;
+        left_child->parent = node->parent;
+        node->parent = left_child;
         update_height(node);
         update_height(left_child);
         return left_child;
@@ -272,29 +273,29 @@ private:
         if (node == nullptr) {
             return 0;
         }
-        return node->height_;
+        return node->height;
     }
     void update_height(node_ptr node) {
         if (node != nullptr) {
-            node->height_ = std::max(height(node->left_), height(node->right_)) + 1;
+            node->height = std::max(height(node->left), height(node->right)) + 1;
         }
     }
     int balance_factor(node_ptr node) const {
         if (node == nullptr) {
             return 0;
         }
-        return height(node->left_) - height(node->right_);
+        return height(node->left) - height(node->right);
     }
     node_ptr rebalance(node_ptr node) {
         int bf = balance_factor(node);
         if (bf == 2) {
-            if (balance_factor(node->left_) == -1) {
-                node->left_ = rotate_left(node->left_);
+            if (balance_factor(node->left) == -1) {
+                node->left = rotate_left(node->left);
             }
             node = rotate_right(node);
         } else if (bf == -2) {
-            if (balance_factor(node->right_) == 1) {
-                node->right_ = rotate_right(node->right_);
+            if (balance_factor(node->right) == 1) {
+                node->right = rotate_right(node->right);
             }
             node = rotate_left(node);
         }
@@ -305,26 +306,26 @@ private:
         if (node == nullptr) {
             return nullptr;
         }
-        while (node != root_) {
+        while (node != root) {
             bool pos = true;
             if (node.is_right_child()) {
                 pos = false;
             }
             node = rebalance(node);
             if (pos) {
-                node->parent_->left_ = node;
+                node->parent->left = node;
             } else {
-                node->parent_->right_ = node;
+                node->parent->right = node;
             }
-            node = node->parent_;
+            node = node->parent;
         }
-        root_ = rebalance(root_);
+        root = rebalance(root);
         return node;
     }
-    node_ptr root_ = nullptr;
-    size_type size_ = 0;
-    key_compare comparator_;
-    mutable node_allocator_type node_allocator_;
+    node_ptr root = nullptr;
+    size_type map_size = 0;
+    key_compare comparator;
+    node_allocator_type node_allocator;
 };
 
 } // polyndrom

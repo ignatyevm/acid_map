@@ -8,186 +8,169 @@ private:
     class map_node {
     public:
         template <class... Args>
-        map_node(Args&& ... args) : value_(std::forward<Args>(args)...) {}
+        map_node(Args&& ... args) : value(std::forward<Args>(args)...) {}
         ~map_node() = default;
         const auto& key() {
-            return value_.first;
+            return value.first;
         }
-        node_pointer left_ = nullptr;
-        node_pointer right_ = nullptr;
-        node_pointer parent_ = nullptr;
-        int8_t height_ = 1;
-        size_t ref_count_ = 0;
-        bool is_deleted_ = false;
-        V value_;
+        node_pointer left = nullptr;
+        node_pointer right = nullptr;
+        node_pointer parent = nullptr;
+        int8_t height = 1;
+        size_t ref_count = 0;
+        bool is_deleted = false;
+        V value;
     };
 public:
     using allocator_type = typename std::allocator_traits<Allocator>::template rebind_alloc<map_node>;
-    template <class... Args>
-    static node_pointer construct_node(allocator_type& allocator, Args&&... args) {
-        map_node* node = std::allocator_traits<allocator_type>::allocate(allocator, 1);
-        std::allocator_traits<allocator_type>::construct(allocator, node, std::forward<Args>(args)...);
-        return node_pointer(allocator, node);
-    }
     node_pointer() = default;
+    template <class... Args>
+    node_pointer(allocator_type& allocator, Args&&... args) : allocator(&allocator) {
+        owned_node = std::allocator_traits<allocator_type>::allocate(allocator, 1);
+        std::allocator_traits<allocator_type>::construct(allocator, owned_node, std::forward<Args>(args)...);
+        owned_node->ref_count += 1;
+    }
     node_pointer(std::nullptr_t) {}
     node_pointer& operator=(std::nullptr_t) {
         release();
-        node_ = nullptr;
-        allocator_= nullptr;
         return *this;
     }
-    node_pointer(const node_pointer& other) : allocator_(other.allocator_) {
+    node_pointer(const node_pointer& other) : allocator(other.allocator) {
         acquire(other);
     }
-    node_pointer(allocator_type& allocator, map_node* node) : node_(node), allocator_(&allocator) {
-        update_ref_count(1);
-    }
     node_pointer& operator=(const node_pointer& other) {
-        if (node_ == other.node_) {
+        if (owned_node == other.owned_node) {
             return *this;
         }
-        allocator_ = other.allocator_;
         release();
         acquire(other);
         return *this;
     }
-    map_node* operator->() const {
-        return node_;
+    map_node* operator->() {
+        return owned_node;
     }
     bool operator==(node_pointer rhs) const {
-        return node_ == rhs.node_;
+        return owned_node == rhs.owned_node;
     }
     bool operator!=(node_pointer rhs) const {
-        return !(node_ == rhs.node_);
+        return owned_node != rhs.owned_node;
     }
     ~node_pointer() {
         release();
     }
-    void make_deleted() const {
-        node_->is_deleted_ = true;
-    }
     void acquire(const node_pointer& other) {
-        allocator_ = other.allocator_;
-        node_ = other.node_;
-        update_ref_count(1);
+        allocator = other.allocator;
+        owned_node = other.owned_node;
+        if (owned_node != nullptr) {
+            owned_node->ref_count += 1;
+        }
     }
     void release() {
-        if (node_ == nullptr) {
-            return;
-        }
-        update_ref_count(-1);
-        if (node_->ref_count_ == 0) {
-            destroy();
+        if (owned_node != nullptr) {
+            owned_node->ref_count -= 1;
+            if (owned_node->ref_count == 0) {
+                destroy();
+            }
+            owned_node = nullptr;
+            allocator = nullptr;
         }
     }
     void destroy() {
-        std::allocator_traits<allocator_type>::destroy(*allocator_, node_);
-        std::allocator_traits<allocator_type>::deallocate(*allocator_, node_, 1);
-        node_ = nullptr;
-        allocator_ = nullptr;
+        std::allocator_traits<allocator_type>::destroy(*allocator, owned_node);
+        std::allocator_traits<allocator_type>::deallocate(*allocator, owned_node, 1);
     }
     void force_destroy() {
-        if (node_ == nullptr) {
+        if (owned_node == nullptr) {
             return;
         }
-        if (node_->left_ != nullptr) {
-            node_->left_.force_destroy();
+        if (owned_node->left != nullptr) {
+            owned_node->left.force_destroy();
         }
-        if (node_->right_ != nullptr) {
-            node_->right_.force_destroy();
+        if (owned_node->right != nullptr) {
+            owned_node->right.force_destroy();
         }
-        if (node_->left_ == nullptr && node_->right_ == nullptr) {
-            node_->parent_ = nullptr;
+        if (owned_node->left == nullptr && owned_node->right == nullptr) {
+            owned_node->parent = nullptr;
             destroy();
-            node_ = nullptr;
-            allocator_ = nullptr;
+            owned_node = nullptr;
+            allocator = nullptr;
         }
     }
-    void update_ref_count(int n) {
-        if (node_ == nullptr) {
-            return;
+    node_pointer prev() {
+        node_pointer node = *this;
+        if (node->is_deleted) {
+            if (node->left == nullptr && node->parent == nullptr) {
+                return node_pointer(nullptr);
+            }
+            if (node->left != nullptr) {
+                return node->left.prev();
+            }
+            if (node->parent != nullptr) {
+                return node->parent.prev();
+            }
+            return node;
         }
-        node_->ref_count_ += n;
+        if (node->left != nullptr) {
+            return node->left.max();
+        }
+        return node.nearest_right_ancestor();
+    }
+    node_pointer next() {
+        node_pointer node = *this;
+        if (node->is_deleted) {
+            while (node != nullptr && node->is_deleted) {
+                node = node->parent;
+            }
+            if (node == nullptr) {
+                return nullptr;
+            }
+            return node;
+        }
+        if (node->right != nullptr) {
+            return node->right.min();
+        }
+        return node.nearest_left_ancestor();
     }
     bool is_left_child() {
-        return node_->parent_->left_ == *this;
+        return owned_node->parent->left == *this;
     }
     bool is_right_child() {
-        return node_->parent_->right_ == *this;
+        return owned_node->parent->right == *this;
     }
     node_pointer min() {
         node_pointer node = *this;
-        while (node->left_ != nullptr) {
-            node = node->left_;
+        while (node->left != nullptr) {
+            node = node->left;
         }
         return node;
     }
     node_pointer max() {
         node_pointer node = *this;
-        while (node->right_ != nullptr) {
-            node = node->right_;
+        while (node->right != nullptr) {
+            node = node->right;
         }
         return node;
     }
     node_pointer nearest_left_ancestor() {
         node_pointer node = *this;
         while (node != nullptr) {
-            if (node->parent_ != nullptr && node.is_left_child()) {
-                return node->parent_;
+            if (node->parent != nullptr && node.is_left_child()) {
+                return node->parent;
             }
-            node = node->parent_;
+            node = node->parent;
         }
         return nullptr;
     }
     node_pointer nearest_right_ancestor() {
         node_pointer node = *this;
         while (node != nullptr) {
-            if (node->parent_ != nullptr && node.is_right_child()) {
-                return node->parent_;
+            if (node->parent != nullptr && node.is_right_child()) {
+                return node->parent;
             }
-            node = node->parent_;
+            node = node->parent;
         }
         return nullptr;
     }
-    node_pointer prev() {
-        node_pointer node = *this;
-        if (node->is_deleted_) {
-            if (node->left_ == nullptr && node->parent_ == nullptr) {
-                return node_pointer(nullptr);
-            }
-            if (node->left_ != nullptr) {
-                return node->left_.prev();
-            }
-            if (node->parent_ != nullptr) {
-                return node->parent_.prev();
-            }
-            return node;
-        }
-        if (node->left_ != nullptr) {
-            return node->left_.max();
-        }
-        return node.nearest_right_ancestor();
-    }
-    node_pointer next() {
-        node_pointer node = *this;
-        if (node->is_deleted_) {
-            if (node->right_ == nullptr && node->parent_ == nullptr) {
-                return node_pointer(nullptr);
-            }
-            if (node->right_ != nullptr) {
-                return node->right_.next();
-            }
-            if (node->parent_ != nullptr) {
-                return node->parent_.next();
-            }
-            return node;
-        }
-        if (node->right_ != nullptr) {
-            return node->right_.min();
-        }
-        return node.nearest_left_ancestor();
-    }
-    map_node* node_ = nullptr;
-    allocator_type* allocator_ = nullptr;
+    map_node* owned_node = nullptr;
+    allocator_type* allocator = nullptr;
 };
