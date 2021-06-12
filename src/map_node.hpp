@@ -97,45 +97,22 @@ public:
         }
     }
     node_pointer prev() {
-        node_pointer node = *this;
-        if (node->is_deleted) {
-            if (node->left == nullptr && node->parent == nullptr) {
-                return node_pointer(nullptr);
-            }
-            if (node->left != nullptr) {
-                return node->left.prev();
-            }
-            if (node->parent != nullptr) {
-                return node->parent.prev();
-            }
-            return node;
+        if (owned_node->is_deleted) {
+            return nearest_not_deleted();
         }
-        if (node->left != nullptr) {
-            return node->left.max();
+        if (owned_node->left != nullptr) {
+            return owned_node->left.max();
         }
-        return node.nearest_right_ancestor();
+        return nearest_right_ancestor();
     }
     node_pointer next() {
-        node_pointer node = *this;
-        if (node->is_deleted) {
-            while (node != nullptr && node->is_deleted) {
-                node = node->parent;
-            }
-            if (node == nullptr) {
-                return nullptr;
-            }
-            return node;
+        if (owned_node->is_deleted) {
+           return nearest_not_deleted();
         }
-        if (node->right != nullptr) {
-            return node->right.min();
+        if (owned_node->right != nullptr) {
+            return owned_node->right.min();
         }
-        return node.nearest_left_ancestor();
-    }
-    bool is_left_child() {
-        return owned_node->parent->left == *this;
-    }
-    bool is_right_child() {
-        return owned_node->parent->right == *this;
+        return nearest_left_ancestor();
     }
     node_pointer min() {
         node_pointer node = *this;
@@ -154,7 +131,7 @@ public:
     node_pointer nearest_left_ancestor() {
         node_pointer node = *this;
         while (node != nullptr) {
-            if (node->parent != nullptr && node.is_left_child()) {
+            if (node->parent != nullptr && node->parent->left == node) {
                 return node->parent;
             }
             node = node->parent;
@@ -164,12 +141,19 @@ public:
     node_pointer nearest_right_ancestor() {
         node_pointer node = *this;
         while (node != nullptr) {
-            if (node->parent != nullptr && node.is_right_child()) {
+            if (node->parent != nullptr && node->parent->right == node) {
                 return node->parent;
             }
             node = node->parent;
         }
         return nullptr;
+    }
+    node_pointer nearest_not_deleted() {
+        node_pointer node = *this;
+        while (node != nullptr && node->is_deleted) {
+            node = node->parent;
+        }
+        return node;
     }
     map_node* owned_node = nullptr;
     allocator_type* allocator = nullptr;

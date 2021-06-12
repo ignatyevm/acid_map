@@ -104,9 +104,6 @@ public:
         return 1;
     }
     iterator erase(iterator pos) {
-        if (pos == end()) {
-            return pos;
-        }
         node_ptr next = pos.node.next();
         erase_node(pos.node);
         return iterator(next);
@@ -138,6 +135,25 @@ public:
         root.force_destroy();
     }
 private:
+    template <class K>
+    std::pair<node_ptr, node_ptr> find_node(node_ptr where, const K& key) const {
+        node_ptr parent = nullptr;
+        node_ptr node = where;
+        while (true) {
+            if (node == nullptr) {
+                return std::make_pair(parent, node);
+            }
+            if (is_equal(node->key(), key)) {
+                return std::make_pair(parent, node);
+            }
+            parent = node;
+            if (is_less(key, node->key())) {
+                node = node->left;
+            } else {
+                node = node->right;
+            }
+        }
+    }
     void insert_node(node_ptr where, node_ptr node) {
         ++map_size;
         if (root == nullptr) {
@@ -202,42 +218,48 @@ private:
         update_height(for_rebalance);
         rebalance_path(for_rebalance);
     }
-    template <class K1, class K2>
-    inline bool is_less(const K1& lhs, const K2& rhs) const {
-        return comparator(lhs, rhs);
-    }
-    template <class K1, class K2>
-    inline bool is_equal(const K1& lhs, const K2& rhs) const {
-        return !is_less(lhs, rhs) && !is_less(rhs, lhs);
-    }
-    template <class K>
-    std::pair<node_ptr, node_ptr> find_node(node_ptr where, const K& key) const {
-        node_ptr parent = nullptr;
-        node_ptr node = where;
-        while (true) {
-            if (node == nullptr) {
-                return std::make_pair(parent, node);
-            }
-            if (is_equal(node->key(), key)) {
-                return std::make_pair(parent, node);
-            }
-            parent = node;
-            if (is_less(key, node->key())) {
-                node = node->left;
-            } else {
-                node = node->right;
-            }
-        }
-    }
     void update_at_parent(node_ptr parent, node_ptr old_node, node_ptr new_node) const {
         if (parent == nullptr) {
             return;
         }
-        if (old_node.is_left_child()) {
+        if (old_node->parent->left == old_node) {
             parent->left = new_node;
         } else {
             parent->right = new_node;
         }
+    }
+    node_ptr rebalance(node_ptr node) {
+        int bf = balance_factor(node);
+        if (bf == 2) {
+            if (balance_factor(node->left) == -1) {
+                node->left = rotate_left(node->left);
+            }
+            node = rotate_right(node);
+        } else if (bf == -2) {
+            if (balance_factor(node->right) == 1) {
+                node->right = rotate_right(node->right);
+            }
+            node = rotate_left(node);
+        }
+        update_height(node);
+        return node;
+    }
+    node_ptr rebalance_path(node_ptr node) {
+        if (node == nullptr) {
+            return nullptr;
+        }
+        while (node != root) {
+            bool pos = node->parent->left == node;
+            node = rebalance(node);
+            if (pos) {
+                node->parent->left = node;
+            } else {
+                node->parent->right = node;
+            }
+            node = node->parent;
+        }
+        root = rebalance(root);
+        return node;
     }
     node_ptr rotate_left(node_ptr node) {
         node_ptr right_child = node->right;
@@ -269,6 +291,12 @@ private:
         update_height(left_child);
         return left_child;
     }
+    int balance_factor(node_ptr node) const {
+        if (node == nullptr) {
+            return 0;
+        }
+        return height(node->left) - height(node->right);
+    }
     int height(node_ptr node) const {
         if (node == nullptr) {
             return 0;
@@ -280,47 +308,13 @@ private:
             node->height = std::max(height(node->left), height(node->right)) + 1;
         }
     }
-    int balance_factor(node_ptr node) const {
-        if (node == nullptr) {
-            return 0;
-        }
-        return height(node->left) - height(node->right);
+    template <class K1, class K2>
+    inline bool is_less(const K1& lhs, const K2& rhs) const {
+        return comparator(lhs, rhs);
     }
-    node_ptr rebalance(node_ptr node) {
-        int bf = balance_factor(node);
-        if (bf == 2) {
-            if (balance_factor(node->left) == -1) {
-                node->left = rotate_left(node->left);
-            }
-            node = rotate_right(node);
-        } else if (bf == -2) {
-            if (balance_factor(node->right) == 1) {
-                node->right = rotate_right(node->right);
-            }
-            node = rotate_left(node);
-        }
-        update_height(node);
-        return node;
-    }
-    node_ptr rebalance_path(node_ptr node) {
-        if (node == nullptr) {
-            return nullptr;
-        }
-        while (node != root) {
-            bool pos = true;
-            if (node.is_right_child()) {
-                pos = false;
-            }
-            node = rebalance(node);
-            if (pos) {
-                node->parent->left = node;
-            } else {
-                node->parent->right = node;
-            }
-            node = node->parent;
-        }
-        root = rebalance(root);
-        return node;
+    template <class K1, class K2>
+    inline bool is_equal(const K1& lhs, const K2& rhs) const {
+        return !is_less(lhs, rhs) && !is_less(rhs, lhs);
     }
     node_ptr root = nullptr;
     size_type map_size = 0;

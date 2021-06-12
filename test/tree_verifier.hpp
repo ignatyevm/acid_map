@@ -31,7 +31,7 @@ public:
         node_ptr left = node->left;
         node_ptr right = node->right;
         if (parent != nullptr) {
-            if (node.is_left_child() && parent->left != node) {
+            if (node->parent->left == node && parent->left != node) {
                 fails_ostream << "parent left node: " << parent->value.first << " ";
                 if (parent->left == nullptr) {
                     fails_ostream << parent->left->value.first << " ";
@@ -39,7 +39,7 @@ public:
                 fails_ostream << node->value.first << std::endl;
                 return false;
             }
-            if (node.is_right_child() && parent->right != node) {
+            if (node->parent->right == node && parent->right != node) {
                 fails_ostream << "parent right node: " << parent->value.first << " ";
                 if (parent->right == nullptr) {
                     fails_ostream << parent->right->value.first << " ";
