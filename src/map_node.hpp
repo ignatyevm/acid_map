@@ -2,7 +2,9 @@
 
 #include "fwd.hpp"
 
-template <class V, class Allocator>
+#include <atomic>
+
+template <class V>
 class node_pointer {
 private:
     class map_node {
@@ -17,17 +19,15 @@ private:
         node_pointer right = nullptr;
         node_pointer parent = nullptr;
         int8_t height = 1;
-        size_t ref_count = 0;
-        bool is_deleted = false;
+        std::atomic_size_t ref_count = 0;
+        std::atomic_bool is_deleted = false;
         V value;
     };
 public:
-    using allocator_type = typename std::allocator_traits<Allocator>::template rebind_alloc<map_node>;
     node_pointer() = default;
     template <class... Args>
-    node_pointer(allocator_type& allocator, Args&&... args) : allocator(&allocator) {
-        owned_node = std::allocator_traits<allocator_type>::allocate(allocator, 1);
-        std::allocator_traits<allocator_type>::construct(allocator, owned_node, std::forward<Args>(args)...);
+    node_pointer(std::piecewise_construct_t, Args&&... args) {
+        owned_node = new map_node(std::forward<Args>(args)...);
         owned_node->ref_count += 1;
     }
     node_pointer(std::nullptr_t) {}
@@ -35,7 +35,7 @@ public:
         release();
         return *this;
     }
-    node_pointer(const node_pointer& other) : allocator(other.allocator) {
+    node_pointer(const node_pointer& other) {
         acquire(other);
     }
     node_pointer& operator=(const node_pointer& other) {
@@ -59,7 +59,6 @@ public:
         release();
     }
     void acquire(const node_pointer& other) {
-        allocator = other.allocator;
         owned_node = other.owned_node;
         if (owned_node != nullptr) {
             owned_node->ref_count += 1;
@@ -69,15 +68,10 @@ public:
         if (owned_node != nullptr) {
             owned_node->ref_count -= 1;
             if (owned_node->ref_count == 0) {
-                destroy();
+                delete owned_node;
             }
             owned_node = nullptr;
-            allocator = nullptr;
         }
-    }
-    void destroy() {
-        std::allocator_traits<allocator_type>::destroy(*allocator, owned_node);
-        std::allocator_traits<allocator_type>::deallocate(*allocator, owned_node, 1);
     }
     void force_destroy() {
         if (owned_node == nullptr) {
@@ -91,9 +85,8 @@ public:
         }
         if (owned_node->left == nullptr && owned_node->right == nullptr) {
             owned_node->parent = nullptr;
-            destroy();
+            delete owned_node;
             owned_node = nullptr;
-            allocator = nullptr;
         }
     }
     node_pointer prev() {
@@ -156,5 +149,5 @@ public:
         return node;
     }
     map_node* owned_node = nullptr;
-    allocator_type* allocator = nullptr;
+    // map_type* map = nullptr;
 };

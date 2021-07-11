@@ -6,47 +6,45 @@
 #include <tuple>
 #include <ostream>
 #include <iterator>
+#include <mutex>
+#include <shared_mutex>
 
 namespace polyndrom {
 
-template <class Key, class T, class Compare = std::less<Key>, class Allocator = std::allocator<std::pair<const Key, T>>>
+template <class Key, class T>
 class acid_map {
 private:
-    friend map_iterator<acid_map<Key, T, Compare, Allocator>>;
+    friend map_iterator<acid_map<Key, T>>;
     template <class Map>
     friend class map_iterator;
     template <class Tree>
     friend class tree_verifier;
-    using self_type = acid_map<Key, T, Compare, Allocator>;
-    using node_ptr = node_pointer<std::pair<const Key, T>, Allocator>;
-    using node_allocator_type = typename node_ptr::allocator_type;
+    using self_type = acid_map<Key, T>;
+    using node_ptr = node_pointer<std::pair<const Key, T>>;
+    using read_lock = std::shared_lock<std::shared_mutex>;
+    using write_lock = std::unique_lock<std::shared_mutex>;
 public:
     using key_type = Key;
     using mapped_type = T;
     using value_type = std::pair<const Key, T>;
     using size_type = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    using key_compare = Compare;
-    using allocator_type = Allocator;
-    using reference = value_type&;
-    using const_reference = const value_type&;
-    using pointer = typename std::allocator_traits<Allocator>::pointer;
-    using const_pointer = typename std::allocator_traits<Allocator>::const_pointer;
     using iterator = map_iterator<self_type>;
-    acid_map(const allocator_type& allocator = allocator_type()) : node_allocator(allocator) {}
+    acid_map() = default;
     template <class K>
     iterator find(const K& key) {
+        read_lock rlock(rw_mutex);
         auto [parent, node] = find_node(root, key);
         if (node == nullptr) {
             return end();
         }
-        return iterator(node);
+        return iterator(this, node);
     }
     template <typename K>
     mapped_type& operator[](K&& key) {
         return try_emplace(std::forward<K>(key)).first->second;
     }
     mapped_type& at(const key_type& key) {
+        read_lock rlock(rw_mutex);
         auto [parent, node] = find_node(root, key);
         if (node == nullptr) {
             throw std::out_of_range("Key does not exists");
@@ -55,47 +53,59 @@ public:
     }
     template <class K>
     bool contains(const K& key) const {
+        read_lock rlock(rw_mutex);
         return count(key) == 1;
     }
     template <class K>
     size_type count(const K& key) const {
+        read_lock rlock(rw_mutex);
         auto [parent, node] = find_node(root, key);
         return static_cast<size_type>(node != nullptr);
     }
     template <class V>
     std::pair<iterator, bool> insert(V&& value) {
+        write_lock wlock(rw_mutex);
         const key_type& key = value.first;
         auto [parent, existing_node] = find_node(root, key);
         if (existing_node != nullptr) {
-            return std::make_pair(iterator(existing_node), false);
+            wlock.unlock();
+            return std::make_pair(iterator(this, existing_node), false);
         }
-        node_ptr node = node_ptr(node_allocator, std::forward<V>(value));
+        node_ptr node(std::piecewise_construct, std::forward<V>(value));
         insert_node(parent, node);
-        return std::make_pair(iterator(node), true);
+        wlock.unlock();
+        return std::make_pair(iterator(this, node), true);
     }
     template <class ...Args>
     std::pair<iterator, bool> emplace(Args&& ...args) {
-        node_ptr node(node_allocator, std::forward<Args>(args)...);
+        write_lock wlock(rw_mutex);
+        node_ptr node(std::piecewise_construct, std::forward<Args>(args)...);
         auto [parent, existing_node] = find_node(root, node->key());
         if (existing_node != nullptr) {
-            return std::make_pair(iterator(existing_node), false);
+            wlock.unlock();
+            return std::make_pair(iterator(this, existing_node), false);
         }
         insert_node(parent, node);
-        return std::make_pair(iterator(node), true);
+        wlock.unlock();
+        return std::make_pair(iterator(this, node), true);
     }
     template <class K, class ...Args>
     std::pair<iterator, bool> try_emplace(K&& key, Args&& ...args) {
+        write_lock wlock(rw_mutex);
         auto [parent, existing_node] = find_node(root, key);
         if (existing_node != nullptr) {
-            return std::make_pair(iterator(existing_node), false);
+            wlock.unlock();
+            return std::make_pair(iterator(this, existing_node), false);
         }
-        node_ptr node = node_ptr(node_allocator, std::piecewise_construct,
-                                                 std::forward_as_tuple(std::forward<K>(key)),
-                                                 std::forward_as_tuple(std::forward<Args>(args)...));
+        node_ptr node = node_ptr(std::piecewise_construct, std::piecewise_construct,
+                                 std::forward_as_tuple(std::forward<K>(key)),
+                                 std::forward_as_tuple(std::forward<Args>(args)...));
         insert_node(parent, node);
-        return std::make_pair(iterator(node), true);
+        wlock.unlock();
+        return std::make_pair(iterator(this, node), true);
     }
     size_type erase(const key_type& key) {
+        write_lock wlock(rw_mutex);
         auto [parent, node] = find_node(root, key);
         if (node == nullptr) {
             return 0;
@@ -104,23 +114,34 @@ public:
         return 1;
     }
     iterator erase(iterator pos) {
-        node_ptr next = pos.node.next();
+        read_lock rlock(rw_mutex);
+        if (pos.node->is_deleted) {
+            return end();
+        }
+        iterator next = pos;
+        ++next;
+        rlock.unlock();
+        write_lock wlock(rw_mutex);
         erase_node(pos.node);
-        return iterator(next);
+        wlock.unlock();
+        return next;
     }
     iterator begin() {
+        read_lock rlock(rw_mutex);
         if (root == nullptr) {
             return end();
         }
-        return iterator(root.min());
+        return iterator(this, root.min());
     }
     iterator end() {
-        return iterator();
+        return iterator(this);
     }
     size_type size() const {
+        read_lock rlock(rw_mutex);
         return map_size;
     }
     bool empty() const {
+        read_lock rlock(rw_mutex);
         return map_size == 0;
     }
     void clear() {
@@ -132,7 +153,7 @@ public:
         root = nullptr;
     }
     ~acid_map() {
-        root.force_destroy();
+        clear();
     }
 private:
     template <class K>
@@ -143,11 +164,11 @@ private:
             if (node == nullptr) {
                 return std::make_pair(parent, node);
             }
-            if (is_equal(node->key(), key)) {
+            if (node->key() == key) {
                 return std::make_pair(parent, node);
             }
             parent = node;
-            if (is_less(key, node->key())) {
+            if (key < node->key()) {
                 node = node->left;
             } else {
                 node = node->right;
@@ -162,7 +183,7 @@ private:
         }
         auto [parent, _] = find_node(where, node->key());
         node->parent = parent;
-        if (is_less(node->key(), parent->key())) {
+        if (node->key() < parent->key()) {
             parent->left = node;
         } else {
             parent->right = node;
@@ -308,18 +329,9 @@ private:
             node->height = std::max(height(node->left), height(node->right)) + 1;
         }
     }
-    template <class K1, class K2>
-    inline bool is_less(const K1& lhs, const K2& rhs) const {
-        return comparator(lhs, rhs);
-    }
-    template <class K1, class K2>
-    inline bool is_equal(const K1& lhs, const K2& rhs) const {
-        return !is_less(lhs, rhs) && !is_less(rhs, lhs);
-    }
     node_ptr root = nullptr;
     size_type map_size = 0;
-    key_compare comparator;
-    node_allocator_type node_allocator;
+    mutable std::shared_mutex rw_mutex;
 };
 
 } // polyndrom
