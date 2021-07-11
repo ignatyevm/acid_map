@@ -13,8 +13,12 @@ TEST(ConsistentMapTest, InvalidateAllDirect) {
         its.push_back(map.emplace(i, i).first);
     }
     map.clear();
+    int k = 0;
     for (auto it : its) {
+        EXPECT_EQ(it->first, k);
+        EXPECT_EQ(it->second, k);
         ++it;
+        ++k;
         EXPECT_EQ(it, map.end());
     }
 }
@@ -28,8 +32,12 @@ TEST(ConsistentMapTest, InvalidateAllReverse) {
         its.push_back(map.emplace(i, i).first);
     }
     map.clear();
+    int k = 0;
     for (auto it : its) {
+        EXPECT_EQ(it->first, k);
+        EXPECT_EQ(it->second, k);
         --it;
+        ++k;
         EXPECT_EQ(it, map.end());
     }
 }

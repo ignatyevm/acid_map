@@ -67,3 +67,9 @@ typename C::iterator random_element(C& c) {
 }
 
 complex_object make_unique_object(complex_object_generator& objects_generator);
+
+static inline int random_int(int start, int end) {
+    int_generator generator(start, end);
+    return generator.next_value();
+}
+
